@@ -286,17 +286,16 @@ const RecommendationCard = ({ product }) => (
 
 const JustForYou = () => {
   const { sellerProducts } = useApp();
-  const productBackfill = sellerProducts.slice(0, 12).map((product, index) => ({
+  const productBackfill = (sellerProducts.length ? sellerProducts : PRODUCTS).slice(0, 12).map((product, index) => ({
     ...product,
     image: product.image || recommendationExtras[index]?.image,
   }));
-  const products = recommendationExtras.length >= 12 ? recommendationExtras : productBackfill;
 
   return (
     <section className="just-for-you">
       <h2>Just For You</h2>
       <div className="recommend-grid">
-        {products.slice(0, 12).map((product) => <RecommendationCard key={product.id} product={product} />)}
+        {productBackfill.map((product) => <RecommendationCard key={product.id} product={product} />)}
       </div>
     </section>
   );

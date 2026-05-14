@@ -33,10 +33,10 @@ export const AppProvider = ({ children }) => {
   useEffect(() => save(MOCK_SESSION_KEY, user), [user]);
   useEffect(() => save(MOCK_CART_KEY, cart), [cart]);
 
-  const register = async ({ email, password, name, role, businessName, idDocument }) => {
+  const register = async ({ email, password, name, role, businessName, idDocument, phone, address, firstName, middleInitial, lastName }) => {
     if (users.find(u => u.email === email)) return { ok: false, msg: 'Email already registered' };
     try {
-      const { data } = await api.post('/auth/register', { email, password, name, role, businessName, idDocument });
+      const { data } = await api.post('/auth/register', { email, password, name, role, businessName, idDocument, phone, address, firstName, middleInitial, lastName });
       setUsers([...users, data.user]);
       setUser(data.user);
       return { ok: true, user: data.user };

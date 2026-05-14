@@ -12,7 +12,8 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import Account from './pages/Account';
-import SellerLanding from './pages/SellerLanding';
+import Seller from './pages/Seller';
+import SellerLogin from './pages/SellerLogin';
 import SellerDashboard from './pages/SellerDashboard';
 import AdminPanel from './pages/AdminPanel';
 import { AppProvider } from './context/AppContext';
@@ -27,12 +28,13 @@ const ScrollToTop = () => {
 const Layout = ({ children }) => {
   const { pathname } = useLocation();
   const authMode = pathname === '/login' ? 'login' : pathname === '/register' ? 'register' : null;
+  const isSellerStandalone = pathname === '/seller' || pathname === '/seller/login';
 
   return (
     <div className="App">
-      <Header />
+      {!isSellerStandalone && <Header />}
       <main className="min-h-[calc(100vh-200px)]">{children}</main>
-      <Footer />
+      {!isSellerStandalone && <Footer />}
       {authMode && <AuthModal mode={authMode} />}
       <Toaster />
     </div>
@@ -59,7 +61,8 @@ function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/account" element={<Account />} />
-            <Route path="/seller" element={<SellerLanding />} />
+            <Route path="/seller" element={<Seller />} />
+            <Route path="/seller/login" element={<SellerLogin />} />
             <Route path="/seller/dashboard" element={<SellerDashboard />} />
             <Route path="/admin" element={<AdminPanel />} />
           </Routes>

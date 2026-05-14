@@ -1,148 +1,236 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, CheckCircle2, PackageCheck, ShieldCheck, Store, Truck } from 'lucide-react';
+import {
+  BadgePercent,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Gift,
+  Headphones,
+  HeartHandshake,
+  MessageCircleQuestion,
+  PackageCheck,
+  Percent,
+  ShieldCheck,
+  Store,
+  UsersRound,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../hooks/use-toast';
 
-const sellerTypes = [
-  {
-    id: 'LazMall',
-    icon: Store,
-    title: 'LazMall',
-    tone: 'pink',
-    description: 'For brand owners and official distributors.',
-    points: ['Official store identity', 'LazMall campaigns and tools', 'Boosted visibility and ranking', 'Commission only when you sell'],
-  },
-  {
-    id: 'Marketplace',
-    icon: Building2,
-    title: 'Marketplace',
-    tone: 'blue',
-    description: 'Open to individual and corporate sellers.',
-    points: ['Sell with low commission fees', 'Access seller tools and trainings', 'Drop-off points near you', 'Good for most online stores'],
-  },
-  {
-    id: 'Delivered by Seller',
-    icon: Truck,
-    title: 'Delivered by Seller',
-    tone: 'rose',
-    description: 'For sellers using their own courier or fulfillment.',
-    points: ['Fresh food and frozen goods', 'Bulky items outside LEL limits', 'Special shipping arrangements', 'Control your own delivery flow'],
-  },
+const benefits = [
+  { icon: BadgePercent, title: '0% commission fee', copy: '0% Platform commission fee for first 90 days' },
+  { icon: Percent, title: 'Free Campaign Voucher', copy: '0% Campaign Vouchers Commission Rate for 1 Campaign' },
+  { icon: Gift, title: 'Seller Coins & Boost Traffic', copy: 'Extra seller coins & 14 days free trial for traffic exchange' },
+  { icon: HeartHandshake, title: 'Ads Credit for you', copy: 'Get PHP 1,200 Ads Credit' },
+  { icon: UsersRound, title: 'Incubation support', copy: 'Personal consultant with Lazada University' },
 ];
 
 const steps = [
-  'Choose your seller type',
-  'Input registration details',
-  'Submit business requirements',
-  'Upload your first product',
+  'Sign up with your local phone number.',
+  'Fill in Email and Address',
+  'Submit ID and Bank Account',
+  'Upload Products and Start Selling',
+];
+
+const support = [
+  {
+    icon: Store,
+    title: 'Lazada University',
+    copy: 'Free onboarding video course which will teach you the essential e-commerce knowledge in content, operations, order fulfillment, and policies.',
+  },
+  {
+    icon: Headphones,
+    title: 'Help Center',
+    copy: 'Helping sellers with the problems they face when starting a shop on Lazada.',
+  },
+  {
+    icon: UsersRound,
+    title: "Seller's Community",
+    copy: 'Go-to hub where sellers gather to elevate their ecommerce business and share insights.',
+  },
+  {
+    icon: PackageCheck,
+    title: 'Lazada Service Marketplace',
+    copy: 'We helps sellers find digital services provided by selected Lazada partners.',
+  },
+];
+
+const faqs = [
+  'What documentation is required for registering on Lazada?',
+  'What are Prohibited and Restricted product for sale on Lazada?',
+  'What happens when sellers list Prohibited Products?',
+  'Why we need the return process and what is the benefit of return process?',
 ];
 
 const SellerLanding = () => {
   const { user, updateUser } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [selected, setSelected] = useState('Marketplace');
-  const [form, setForm] = useState({ businessName: '', idDocument: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [form, setForm] = useState({
+    phone: '',
+    password: '',
+    businessName: '',
+    idDocument: '',
+  });
+
+  const update = (field) => (event) => setForm({ ...form, [field]: event.target.value });
+  const updatePhone = (event) => setForm({ ...form, phone: event.target.value.replace(/\D/g, '').slice(0, 11) });
 
   const apply = async (event) => {
     event.preventDefault();
     if (!user) {
-      toast({ title: 'Login required', description: 'Please login or sign up as a buyer first.' });
-      navigate('/login');
+      toast({ title: 'Create an account first', description: 'Sign up or log in before creating your Lazada store.' });
+      navigate('/register');
       return;
     }
 
     await updateUser({
       role: 'seller',
       verified: false,
-      sellerType: selected,
+      sellerType: 'Marketplace',
       businessName: form.businessName || `${user.name}'s Store`,
-      idDocument: form.idDocument || `${selected}-application`,
+      idDocument: form.idDocument || 'Marketplace-application',
     });
 
-    toast({ title: 'Seller application submitted', description: `${selected} application is pending verification.` });
+    toast({ title: 'Seller application submitted', description: 'Your Marketplace store is pending verification.' });
     navigate('/account');
   };
 
+  const scrollToHero = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   return (
-    <div className="seller-apply-page">
-      <section className="seller-hero">
-        <div>
-          <img src="/lazada_logo.png" alt="Lazada" />
-          <h1>Start selling on the leading e-commerce platform in the Philippines today!</h1>
+    <div className="seller-center-page">
+      <nav className="seller-center-nav">
+        <div className="seller-center-brand">
+          <span className="seller-brand-mark">S</span>
+          <strong>Lazada<br /><b>Seller Center</b></strong>
         </div>
-        <div className="seller-hero-box">
-          <PackageCheck className="h-24 w-24" />
+        <div className="seller-center-tabs">
+          <button type="button" className="active"><span>₱</span> MarketPlace</button>
+          <button type="button"><span>G</span> LazGlobal</button>
+        </div>
+        <div className="seller-center-locale">
+          <button type="button"><span className="seller-flag" /> Pilipinas <ChevronDown className="h-4 w-4" /></button>
+          <button type="button">English <ChevronDown className="h-4 w-4" /></button>
+        </div>
+      </nav>
+
+      <section className="seller-market-hero">
+        <div className="seller-hero-overlay" />
+        <div className="seller-market-inner">
+          <div className="seller-market-copy">
+            <h1>Grow your<br />business<br />with us!</h1>
+            <div className="seller-market-stats">
+              <div><strong>80</strong><span>M</span><p>Monthly Active Users<br />on Lazada</p></div>
+              <div><strong>1</strong><span>M</span><p>Products across 100+<br />countries</p></div>
+              <div><strong>70</strong><span>%</span><p>New sellers make their<br />first sale within 4 weeks</p></div>
+            </div>
+          </div>
+
+          <form className="seller-create-card" onSubmit={apply}>
+            <h2>Create your Lazada Store now</h2>
+            <p>Already have an account? Click to <button type="button" onClick={() => navigate('/seller/login')}>Log in</button></p>
+            <div className="seller-verify-tabs">
+              <button type="button">Voice Call</button>
+              <button type="button" className="active">SMS</button>
+            </div>
+            <label className="seller-phone-field">
+              <span><span className="seller-flag" /> +63</span>
+              <input value={form.phone} onChange={updatePhone} placeholder="Phone number" inputMode="numeric" />
+            </label>
+            <label className="seller-password-field">
+              <input value={form.password} onChange={update('password')} type={showPassword ? 'text' : 'password'} placeholder="New Password" />
+              <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)}>
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </label>
+            <label className="seller-password-field">
+              <input value={form.businessName} onChange={update('businessName')} placeholder="Store or business name" />
+              <Store className="h-4 w-4" />
+            </label>
+            <label className="seller-password-field">
+              <input value={form.idDocument} onChange={update('idDocument')} placeholder="Business document ID" />
+              <ShieldCheck className="h-4 w-4" />
+            </label>
+            <button type="submit" className="seller-submit">Verify with SMS</button>
+            <small>By clicking Next, you agree to these <a href="#terms">Terms & Conditions</a>, <a href="#seller-terms">Seller Instant Messaging AI Terms</a> and <a href="#privacy">Privacy Policy</a></small>
+            <div className="seller-form-divider"><span />or<span /></div>
+            <div className="seller-social-row">
+              <button type="button"><span className="seller-brand-mini">Laz</span> Lazada App</button>
+              <button type="button">G</button>
+            </div>
+            <button type="button" className="seller-global-link">Sign up as LazGlobal Seller <ChevronRight className="h-4 w-4" /></button>
+          </form>
         </div>
       </section>
 
-      <section className="seller-type-section">
-        <h2>Choose your seller type below to start your business!</h2>
-        <div className="seller-type-grid">
-          {sellerTypes.map((type) => {
-            const Icon = type.icon;
+      <section className="seller-benefits">
+        <h2>New Seller Benefits</h2>
+        <div className="seller-benefit-grid">
+          {benefits.map((benefit) => {
+            const Icon = benefit.icon;
             return (
-              <button
-                type="button"
-                key={type.id}
-                className={`seller-type-card ${type.tone} ${selected === type.id ? 'active' : ''}`}
-                onClick={() => setSelected(type.id)}
-              >
-                <header>
-                  <Icon className="h-8 w-8" />
-                  <strong>{type.title}</strong>
-                </header>
-                <p>{type.description}</p>
-                <ul>
-                  {type.points.map((point) => <li key={point}>{point}</li>)}
-                </ul>
-                <span>{type.id === 'LazMall' ? 'Learn More' : 'Sign-Up Now'}</span>
-              </button>
+              <article key={benefit.title}>
+                <div><Icon className="h-9 w-9" /></div>
+                <h3>{benefit.title}</h3>
+                <p>{benefit.copy}</p>
+              </article>
             );
           })}
         </div>
       </section>
 
-      <section className="seller-steps">
-        <h2>Start selling in 4 easy steps!</h2>
-        <div className="seller-steps-panel">
-          <div className="seller-device">
-            <Store className="h-16 w-16" />
-            <strong>Seller</strong>
-            <p>All steps can be done on Lazada Seller Center.</p>
+      <section className="seller-start-steps">
+        <h2>Steps to Start Selling</h2>
+        <div className="seller-start-layout">
+          <div>
+            <p>Selling on Lazada provides you with good opportunity to step into the SEA market and access to learning materials and support you to achieve your business goals. Seller can be easily benefited through Lazada's platform since product would be displayed to a wide rang of buyers.</p>
+            <button type="button" onClick={scrollToHero}>Sign up now</button>
           </div>
-          <div className="seller-step-list">
+          <div className="seller-step-accordion">
             {steps.map((step, index) => (
-              <div key={step}>
-                <b>{index + 1}</b>
-                <span>{step}</span>
-              </div>
+              <button type="button" key={step}>
+                <strong>{index + 1}.</strong> {step}
+                <ChevronDown className="h-5 w-5" />
+              </button>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="seller-application">
-        <h2>Apply as {selected}</h2>
-        <form onSubmit={apply}>
-          <input value={form.businessName} onChange={(event) => setForm({ ...form, businessName: event.target.value })} placeholder="Business or store name" />
-          <input value={form.idDocument} onChange={(event) => setForm({ ...form, idDocument: event.target.value })} placeholder="Business document ID / filename" />
-          <button type="submit"><ShieldCheck className="h-5 w-5" />Submit Seller Application</button>
-        </form>
-        {!user && <p>Buyer account required. Login first, then submit your seller application.</p>}
-        {user?.role === 'seller' && (
-          <p className="seller-current-status">
-            Current seller status: <CheckCircle2 className="h-4 w-4" /> {user.verified ? 'Verified' : 'Pending verification'}
-          </p>
-        )}
+      <section className="seller-support">
+        <h2>Seller's Support</h2>
+        <div className="seller-support-grid">
+          {support.map((item) => {
+            const Icon = item.icon;
+            return (
+              <article key={item.title}>
+                <h3><Icon className="h-8 w-8" /> {item.title} <ChevronRight className="h-5 w-5" /></h3>
+                <p>{item.copy}</p>
+              </article>
+            );
+          })}
+        </div>
       </section>
 
-      <section className="seller-blue-info">
-        <h3>Becoming a Lazada Seller Now Made Easier!</h3>
-        <p>The top online shopping site and eCommerce platform in the Philippines gives buyers a reliable place to shop and sellers a practical way to grow online.</p>
-        <p>Apply as LazMall, Marketplace, or Delivered by Seller depending on how your business operates and how you plan to fulfill orders.</p>
+      <section className="seller-faq">
+        <h2>FAQ</h2>
+        <div>
+          {faqs.map((faq) => (
+            <button type="button" key={faq}>
+              {faq}
+              <ChevronDown className="h-5 w-5" />
+            </button>
+          ))}
+        </div>
+        <button type="button" className="seller-more-help">Need more help</button>
       </section>
+
+      <button type="button" className="seller-floating-signup" onClick={scrollToHero}>Sign Up ↑</button>
+      <button type="button" className="seller-help"><MessageCircleQuestion className="h-5 w-5" /> Need Help</button>
     </div>
   );
 };
