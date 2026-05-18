@@ -1,4 +1,4 @@
-import { CATEGORIES, DEFAULT_ADMIN, PRODUCTS, SELLERS } from '../src/data/mock.js';
+import { CATEGORIES, DEFAULT_ADMIN, PRODUCTS, SELLERS } from './seedData.js';
 import { isDbConfigured, query } from './db.js';
 
 const ADMIN_USER_ID = 100000;
@@ -17,6 +17,34 @@ const splitName = (name = '') => {
 
 const sellerIdByMockId = new Map(SELLERS.map((seller, index) => [seller.id, SELLER_BASE_ID + index]));
 const categoryIdBySlug = new Map(CATEGORIES.map((category, index) => [category.id, CATEGORY_BASE_ID + index]));
+const subcategoryIdBySlug = new Map();
+
+CATEGORIES.forEach((category, categoryIndex) => {
+  category.subcategories?.forEach((subcategory, subcategoryIndex) => {
+    const slug = `${category.id}-${subcategory.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`;
+    subcategoryIdBySlug.set(slug, CATEGORY_BASE_ID + CATEGORIES.length + categoryIndex * 100 + subcategoryIndex);
+  });
+});
+
+const ensureColumn = async (tableName, columnName, definition) => {
+  const existing = await query(
+    `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = :tableName
+        AND COLUMN_NAME = :columnName
+      LIMIT 1`,
+    { tableName, columnName },
+  );
+
+  if (!existing.length) {
+    await query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+};
+
+const ensureSchemaPatches = async () => {
+  await ensureColumn('users', 'user_default_address', 'JSON NULL AFTER user_phone_no');
+};
 
 const paymentGatewayFromMethod = (method) => {
   if (method === 'GCash') return 'PayMongo';
@@ -42,7 +70,7 @@ export const ensureSellerForUser = async (user) => {
     {
       sellerId: nextId,
       userId: user.id,
-      storeName: user.businessName || `${user.name}'s Store`,
+      storeName: user.storeName || user.businessName || `${user.name}'s Store`,
       businessName: user.businessName || `${user.name}'s Business`,
       permitNo: user.idDocument || `PERMIT-${user.id}`,
       rating: null,
@@ -54,6 +82,8 @@ export const ensureSellerForUser = async (user) => {
 
 export const ensureSeedData = async () => {
   if (!isDbConfigured) return;
+
+  await ensureSchemaPatches();
 
   const adminName = splitName(DEFAULT_ADMIN.name);
   await query(
@@ -111,18 +141,37 @@ export const ensureSeedData = async () => {
   }
 
   for (const [index, category] of CATEGORIES.entries()) {
+    const parentId = CATEGORY_BASE_ID + index;
+
     await query(
       `INSERT IGNORE INTO categories
         (cat_id, cat_slug, cat_name, cat_description, cat_status)
        VALUES
         (:id, :slug, :name, :description, 'Active')`,
       {
-        id: CATEGORY_BASE_ID + index,
+        id: parentId,
         slug: category.id,
         name: category.name,
         description: `${category.name} category`,
       },
     );
+
+    for (const subcategory of category.subcategories || []) {
+      const slug = `${category.id}-${subcategory.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`;
+      await query(
+        `INSERT IGNORE INTO categories
+          (cat_id, cat_parent_category_id, cat_slug, cat_name, cat_description, cat_status)
+         VALUES
+          (:id, :parentId, :slug, :name, :description, 'Active')`,
+        {
+          id: subcategoryIdBySlug.get(slug),
+          parentId,
+          slug,
+          name: subcategory,
+          description: `${subcategory} under ${category.name}`,
+        },
+      );
+    }
   }
 
   for (const [index, product] of PRODUCTS.entries()) {

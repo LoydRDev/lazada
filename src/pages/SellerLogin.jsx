@@ -4,6 +4,7 @@ import { ChevronDown, Eye, EyeOff, MessageCircleQuestion, Package, QrCode, Shopp
 import { FcGoogle } from 'react-icons/fc';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../hooks/use-toast';
+import { isSellerSetupComplete } from '../lib/sellerSetup';
 
 const SellerLogin = () => {
   const { login } = useApp();
@@ -32,7 +33,13 @@ const SellerLogin = () => {
     }
 
     toast({ title: 'Welcome to Seller Center', description: `Logged in as ${result.user.name}.` });
-    navigate(result.user.role === 'admin' ? '/admin' : '/seller/dashboard');
+    if (result.user.role === 'admin') {
+      navigate('/admin');
+    } else if (!isSellerSetupComplete(result.user)) {
+      navigate('/seller/setup');
+    } else {
+      navigate('/seller/dashboard');
+    }
   };
 
   return (

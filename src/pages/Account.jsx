@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BriefcaseBusiness, Heart, Home, MapPin, Meh, ShoppingCart } from 'lucide-react';
-import { PRODUCTS } from '../data/mock';
+import { PRODUCTS } from '../data/catalog';
 import { useApp } from '../context/AppContext';
 import { peso_fmt } from '../components/ProductCard';
 

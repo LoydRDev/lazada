@@ -12,7 +12,6 @@ import {
   MessageCircleQuestion,
   PackageCheck,
   Percent,
-  ShieldCheck,
   Store,
   UsersRound,
 } from 'lucide-react';
@@ -65,38 +64,71 @@ const faqs = [
 ];
 
 const SellerLanding = () => {
-  const { user, updateUser } = useApp();
+  const { user, register, login, updateUser } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({
     phone: '',
     password: '',
-    businessName: '',
-    idDocument: '',
   });
 
-  const update = (field) => (event) => setForm({ ...form, [field]: event.target.value });
   const updatePhone = (event) => setForm({ ...form, phone: event.target.value.replace(/\D/g, '').slice(0, 11) });
+  const updatePassword = (event) => setForm({ ...form, password: event.target.value });
 
   const apply = async (event) => {
     event.preventDefault();
-    if (!user) {
-      toast({ title: 'Create an account first', description: 'Sign up or log in before creating your Lazada store.' });
-      navigate('/register');
+    if (isSubmitting) return;
+
+    if (!/^9\d{9}$/.test(form.phone)) {
+      toast({ title: 'Invalid phone number', description: 'Enter a valid PH mobile number without the +63 prefix.' });
       return;
     }
 
-    await updateUser({
-      role: 'seller',
-      verified: false,
-      sellerType: 'Marketplace',
-      businessName: form.businessName || `${user.name}'s Store`,
-      idDocument: form.idDocument || 'Marketplace-application',
-    });
+    if (form.password.length < 8) {
+      toast({ title: 'Password too short', description: 'Use at least 8 characters for your seller account.' });
+      return;
+    }
 
-    toast({ title: 'Seller application submitted', description: 'Your Marketplace store is pending verification.' });
-    navigate('/account');
+    setIsSubmitting(true);
+
+    try {
+      if (user) {
+        const result = await updateUser({ role: 'seller', verified: false });
+        if (!result.ok) {
+          toast({ title: 'Seller registration failed', description: result.msg });
+          return;
+        }
+      } else {
+        const sellerPhone = `+63${form.phone}`;
+        const result = await register({
+          email: `seller${form.phone}@seller.lazada.ph`,
+          password: form.password,
+          name: `Seller ${form.phone.slice(-4)}`,
+          role: 'seller',
+          phone: sellerPhone,
+        });
+
+        if (!result.ok) {
+          const loginResult = await login(form.phone, form.password);
+          if (!loginResult.ok) {
+            toast({ title: 'Seller registration failed', description: result.msg });
+            return;
+          }
+        }
+      }
+
+      toast({ title: 'Seller account created', description: 'Complete your business setup to continue.' });
+      navigate('/seller/setup');
+    } catch (error) {
+      toast({
+        title: 'Seller registration failed',
+        description: error?.response?.data?.msg || error?.message || 'Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const scrollToHero = () => window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -142,20 +174,14 @@ const SellerLanding = () => {
               <input value={form.phone} onChange={updatePhone} placeholder="Phone number" inputMode="numeric" />
             </label>
             <label className="seller-password-field">
-              <input value={form.password} onChange={update('password')} type={showPassword ? 'text' : 'password'} placeholder="New Password" />
+              <input value={form.password} onChange={updatePassword} type={showPassword ? 'text' : 'password'} placeholder="New Password" />
               <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)}>
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </label>
-            <label className="seller-password-field">
-              <input value={form.businessName} onChange={update('businessName')} placeholder="Store or business name" />
-              <Store className="h-4 w-4" />
-            </label>
-            <label className="seller-password-field">
-              <input value={form.idDocument} onChange={update('idDocument')} placeholder="Business document ID" />
-              <ShieldCheck className="h-4 w-4" />
-            </label>
-            <button type="submit" className="seller-submit">Verify with SMS</button>
+            <button type="submit" className="seller-submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Verifying...' : 'Verify with SMS'}
+            </button>
             <small>By clicking Next, you agree to these <a href="#terms">Terms & Conditions</a>, <a href="#seller-terms">Seller Instant Messaging AI Terms</a> and <a href="#privacy">Privacy Policy</a></small>
             <div className="seller-form-divider"><span />or<span /></div>
             <div className="seller-social-row">

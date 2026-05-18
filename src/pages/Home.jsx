@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Smartphone, Star } from 'lucide-react';
-import { CATEGORIES, FLASH_SALE, PRODUCTS } from '../data/mock';
+import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { FLASH_SALE, PRODUCTS } from '../data/catalog';
 import { useApp } from '../context/AppContext';
+import { ProductCardSkeleton } from '../components/ProductCard';
 
 const peso = (n) => `\u20b1${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
@@ -58,22 +59,22 @@ const saleProducts = [
 ];
 
 const categoryTiles = [
-  { name: 'Thermal Flasks & Containers', image: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Mini/Hand-Held Fans', image: 'https://images.unsplash.com/photo-1585515320310-259814833e62?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Book Coverings & Accessories', image: 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Blended Cooking Oil', image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=240&q=80' },
-  { name: "Women's Socks & Tights", image: 'https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Phone Cables & Converters', image: 'https://images.unsplash.com/photo-1603539444875-76e7684265f6?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Hair Coloring', image: 'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Motorcycle Cleaners', image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Mobiles', image: PRODUCTS[0].image },
-  { name: 'Fixture Parts & Valves', image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Body Moisturizers', image: 'https://images.unsplash.com/photo-1570194065650-d99fb4bedf0a?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Outdoor Furniture Accessories', image: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Toothpaste', image: 'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Brooms', image: 'https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Safety Gloves', image: 'https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=240&q=80' },
-  { name: 'Cookware Sets', image: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Thermal Flasks & Containers', category: 'home', image: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Mini/Hand-Held Fans', category: 'tv', image: 'https://images.unsplash.com/photo-1585515320310-259814833e62?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Book Coverings & Accessories', category: 'baby', image: 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Blended Cooking Oil', category: 'groceries', image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=240&q=80' },
+  { name: "Women's Socks & Tights", category: 'fashion', image: 'https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Phone Cables & Converters', category: 'accessories', image: 'https://images.unsplash.com/photo-1603539444875-76e7684265f6?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Hair Coloring', category: 'beauty', image: 'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Motorcycle Cleaners', category: 'auto', image: 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Mobiles', category: 'electronics', image: PRODUCTS[0].image },
+  { name: 'Fixture Parts & Valves', category: 'home', image: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Body Moisturizers', category: 'beauty', image: 'https://images.unsplash.com/photo-1570194065650-d99fb4bedf0a?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Outdoor Furniture Accessories', category: 'home', image: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Toothpaste', category: 'beauty', image: 'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Brooms', category: 'home', image: 'https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Safety Gloves', category: 'auto', image: 'https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=240&q=80' },
+  { name: 'Cookware Sets', category: 'home', image: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=240&q=80' },
 ];
 
 const recommendationExtras = [
@@ -143,21 +144,19 @@ const HeroBanner = () => {
 const AppCard = () => (
   <aside id="app" className="lazada-app-card" aria-label="Try our app">
     <div className="lazada-app-title">
-      <span className="lazada-app-icon">Laz</span>
+      <img className="lazada-app-icon" src="/try_our_app/Laz.png" alt="" aria-hidden="true" />
       <strong>Try Our App</strong>
     </div>
     <div className="lazada-app-promo">
       <span>4.8 Rated</span>
       <b>Get the Lazada app to enjoy</b>
       <div className="lazada-app-benefits">
-        <div><span>FS</span>Free<br />Shipping</div>
-        <div><span>%</span>Exclusive<br />Vouchers</div>
+        <div><img src="/try_our_app/icon2.png" alt="" aria-hidden="true" />Free<br />Shipping</div>
+        <div><img src="/try_our_app/icon1.png" alt="" aria-hidden="true" />Exclusive<br />Vouchers</div>
       </div>
     </div>
     <div className="lazada-app-bottom">
-      <div className="qr-grid" aria-hidden="true">
-        {Array.from({ length: 81 }).map((_, idx) => <span key={idx} className={idx % 3 === 0 || idx % 7 === 0 ? 'on' : ''} />)}
-      </div>
+      <img className="qr-grid" src="/try_our_app/icon3.png" alt="Lazada app QR code" />
       <div className="store-buttons">
         <button type="button">App Store</button>
         <button type="button">Google Play</button>
@@ -226,16 +225,16 @@ const FlashSale = () => {
           <Link to="/category/electronics">Shop All Products</Link>
         </div>
         <div className="lazada-product-row">
-          {saleProducts.map((product, index) => {
-            const fallback = FLASH_SALE[index];
+          {FLASH_SALE.slice(0, 6).map((product, index) => {
+            const badge = saleProducts[index]?.badge || 'LazFlash';
             return (
-              <Link to={`/product/${fallback?.id || product.id}`} className="lazada-sale-card" key={product.id}>
+              <Link to={`/product/${product.id}`} className="lazada-sale-card" key={product.id}>
                 <div className="sale-thumb">
                   <img src={product.image} alt={product.name} loading="lazy" />
-                  <span className="sale-badge">{product.badge}</span>
+                  <span className="sale-badge">{badge}</span>
                 </div>
                 <h3>{product.name}</h3>
-                <p>{peso(product.price)}</p>
+                <p>{peso(product.flashPrice || product.price)}</p>
               </Link>
             );
           })}
@@ -249,17 +248,14 @@ const Categories = () => (
   <section className="home-categories">
     <h2>Categories</h2>
     <div className="home-category-grid">
-      {categoryTiles.map((category, index) => {
-        const categoryId = CATEGORIES[index % CATEGORIES.length].id;
-        return (
-          <Link to={`/category/${categoryId}`} className="home-category-tile" key={category.name}>
-            <div className="category-thumb">
-              <img src={category.image} alt={category.name} loading="lazy" />
-            </div>
-            <span>{category.name}</span>
-          </Link>
-        );
-      })}
+      {categoryTiles.map((category) => (
+        <Link to={`/category/${category.category}`} className="home-category-tile" key={category.name}>
+          <div className="category-thumb">
+            <img src={category.image} alt={category.name} loading="lazy" />
+          </div>
+          <span>{category.name}</span>
+        </Link>
+      ))}
     </div>
   </section>
 );
@@ -285,28 +281,35 @@ const RecommendationCard = ({ product }) => (
 );
 
 const JustForYou = () => {
-  const { sellerProducts } = useApp();
-  const productBackfill = (sellerProducts.length ? sellerProducts : PRODUCTS).slice(0, 12).map((product, index) => ({
+  const { isCatalogLoading, sellerProducts } = useApp();
+  const [visibleCount, setVisibleCount] = useState(12);
+  const productBackfill = (sellerProducts.length ? sellerProducts : PRODUCTS).map((product, index) => ({
     ...product,
     image: product.image || recommendationExtras[index]?.image,
   }));
+  const visibleProducts = productBackfill.slice(0, visibleCount);
+  const canShowMore = visibleCount < productBackfill.length;
 
   return (
     <section className="just-for-you">
       <h2>Just For You</h2>
       <div className="recommend-grid">
-        {productBackfill.map((product) => <RecommendationCard key={product.id} product={product} />)}
+        {isCatalogLoading
+          ? Array.from({ length: 12 }).map((_, index) => <ProductCardSkeleton key={index} />)
+          : visibleProducts.map((product) => <RecommendationCard key={product.id} product={product} />)}
       </div>
+      {!isCatalogLoading && canShowMore && (
+        <button
+          type="button"
+          className="recommend-show-more"
+          onClick={() => setVisibleCount((count) => Math.min(count + 6, productBackfill.length))}
+        >
+          Show More
+        </button>
+      )}
     </section>
   );
 };
-
-const MessagesButton = () => (
-  <button type="button" className="messages-float">
-    <Smartphone className="h-5 w-5" />
-    Messages
-  </button>
-);
 
 const Home = () => (
   <div className="lazada-home">
@@ -320,7 +323,6 @@ const Home = () => (
       <Categories />
       <JustForYou />
     </div>
-    <MessagesButton />
   </div>
 );
 

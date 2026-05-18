@@ -1,20 +1,79 @@
-// Mock data for Lazada PH clone
-
-console.log("mock loaded"); 
+// Seed catalog data used to bootstrap local development databases and UI fallbacks.
 
 export const CATEGORIES = [
-  { id: 'electronics', name: 'Electronic Devices', icon: 'Smartphone' },
-  { id: 'accessories', name: 'Electronic Accessories', icon: 'Headphones' },
-  { id: 'tv', name: 'TV & Home Appliances', icon: 'Tv' },
-  { id: 'beauty', name: 'Health & Beauty', icon: 'Sparkles' },
-  { id: 'fashion', name: "Women's Fashion", icon: 'Shirt' },
-  { id: 'men', name: "Men's Fashion", icon: 'User' },
-  { id: 'watches', name: 'Watches & Jewelry', icon: 'Watch' },
-  { id: 'baby', name: 'Babies & Toys', icon: 'Baby' },
-  { id: 'groceries', name: 'Groceries & Pets', icon: 'ShoppingBasket' },
-  { id: 'home', name: 'Home & Lifestyle', icon: 'Home' },
-  { id: 'sports', name: 'Sports & Outdoor', icon: 'Bike' },
-  { id: 'auto', name: 'Automotive & Motorcycle', icon: 'Car' },
+  {
+    id: 'electronics',
+    name: 'Electronic Devices',
+    icon: 'Smartphone',
+    subcategories: ['Mobiles', 'Tablets', 'Laptops', 'Desktops', 'Security Cameras', 'Action/Video Cameras', 'Digital Cameras', 'Gaming Consoles', 'Gadgets'],
+  },
+  {
+    id: 'accessories',
+    name: 'Electronic Accessories',
+    icon: 'Headphones',
+    subcategories: ['Mobile Accessories', 'Audio', 'Computer Accessories', 'Camera Accessories', 'Storage', 'Printers', 'Computer Components', 'Network Components', 'Wearable Technology', 'Console Accessories', 'Tablet Accessories'],
+  },
+  {
+    id: 'tv',
+    name: 'TV & Home Appliances',
+    icon: 'Tv',
+    subcategories: ['TV & Video Devices', 'TV Accessories', 'Home Audio', 'Cooling & Air Treatment', 'Small Kitchen Appliances', 'Vacuums & Floor Care', 'Household Appliances', 'Personal Care Appliances', 'Large Appliances', 'Parts & Accessories'],
+  },
+  {
+    id: 'beauty',
+    name: 'Health & Beauty',
+    icon: 'Sparkles',
+    subcategories: ['Make-Up', 'Skincare', 'Hair Care', 'Bath & Body', 'Personal Care', "Men's Care", 'Fragrances', 'Beauty Tools', 'Food Supplements', 'Medical Supplies', 'Adult Diapers & Incontinence'],
+  },
+  {
+    id: 'baby',
+    name: 'Babies & Toys',
+    icon: 'Baby',
+    subcategories: ['Diapering & Potty', 'Milk Formula & Baby Food', 'Baby Fashion & Accessories', 'Feeding Essentials', 'Baby Gear', 'Nursery', 'Baby Personal Care', 'Toys & Games', 'Electronic & Remote Control Toys', 'Sports Toys & Outdoor Play', 'Baby & Toddler Toys', 'Learning & Education'],
+  },
+  {
+    id: 'groceries',
+    name: 'Groceries & Pets',
+    icon: 'ShoppingBasket',
+    subcategories: ['Drinks', 'Food Staples & Cooking Essentials', 'Chocolate, Snacks & Sweets', 'Beer, Wine & Spirits', 'Breakfast Cereals & Spreads', 'Frozen', 'Bakery', 'Fruit & Vegetables', 'Meat and Seafood', 'Household Supplies', 'Pet Supplies', 'Pet Healthcare'],
+  },
+  {
+    id: 'home',
+    name: 'Home & Living',
+    icon: 'Home',
+    subcategories: ['Bath', 'Bedding', 'Furniture', 'Storage & Organisation', 'Laundry & Cleaning Equipment', 'Kitchen & Dining', 'Lighting', 'Home Decor', 'Outdoor & Garden', 'Stationery & Craft', 'Tools & Home Improvement'],
+  },
+  {
+    id: 'fashion',
+    name: "Women's Fashion & Accessories",
+    icon: 'Shirt',
+    subcategories: ["Women's Clothing", "Women's Shoes", 'Lingerie, Sleep & Lounge', "Women's Sports Clothing", "Women's Sports Shoes", 'Accessories', "Women's Bags", "Women's Watches", "Women's Jewellery"],
+  },
+  {
+    id: 'men',
+    name: "Men's Fashion & Accessories",
+    icon: 'User',
+    subcategories: ["Men's Clothing", "Men's Shoes", 'Underwear', "Men's Sports Clothing", "Men's Sports Shoes", 'Accessories', "Men's Bags", "Men's Watches", "Men's Jewellery"],
+  },
+  {
+    id: 'kids',
+    name: "Kid's Fashion & Accessories",
+    icon: 'Baby',
+    subcategories: ["Girls' Clothing", "Girls' Shoes", "Girls' Sports Clothing", "Girls' Sports Shoes", "Boys' Clothing", "Boys' Shoes", "Boys' Sports Clothing", "Boys' Sports Shoes", "Kids' Bags", "Kids' Watches", "Kids' Jewellery"],
+  },
+  {
+    id: 'sports',
+    name: 'Sports & Lifestyle',
+    icon: 'Bike',
+    subcategories: ['Outdoor Recreation', 'Sports Shoes', 'Sports Apparel', 'Exercise & Fitness Equipment', 'Sports Equipment', 'Team Merchandise/Fan Shop', 'Musical Instruments', 'Books', 'Music', 'Movies', 'Magazines'],
+  },
+  {
+    id: 'auto',
+    name: 'Automotive & Motorcycles',
+    icon: 'Car',
+    subcategories: ['Automotive', 'Motorcycles', 'Vehicle Care', 'Automobile Sales & Reservations', 'Motorcycle Sales & Reservations', 'Fuels - Gasoline/Petrol, Diesel', 'Automotive Oils & Fluids', 'Motorcycle Oils & Fluids'],
+  },
+  { id: 'watches', name: 'Watches & Jewelry', icon: 'Watch', hidden: true, subcategories: ['Watches', 'Jewellery'] },
 ];
 
 export const HERO_BANNERS = [
@@ -41,7 +100,21 @@ export const HERO_BANNERS = [
   },
 ];
 
-const IMG = {
+const sizeRemoteImage = (url, width = 640) => {
+  const separator = url.includes('?') ? '&' : '?';
+
+  if (url.includes('images.unsplash.com')) {
+    return `${url}${separator}auto=format&fit=crop&w=${width}&q=75`;
+  }
+
+  if (url.includes('images.pexels.com')) {
+    return `${url}${separator}auto=compress&cs=tinysrgb&w=${width}`;
+  }
+
+  return url;
+};
+
+const RAW_IMG = {
   phone1: 'https://images.unsplash.com/photo-1634403665481-74948d815f03',
   phone2: 'https://images.unsplash.com/photo-1598327105666-5b89351aff97',
   phone3: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9',
@@ -67,6 +140,10 @@ const IMG = {
   c2: 'https://images.unsplash.com/photo-1502920917128-1aa500764cbd',
   c3: 'https://images.unsplash.com/photo-1495707902641-75cac588d2e9',
 };
+
+const IMG = Object.fromEntries(
+  Object.entries(RAW_IMG).map(([key, value]) => [key, sizeRemoteImage(value)])
+);
 
 export const PRODUCTS = [
   { id: 'p1', name: 'iPhone 15 Pro Max 256GB Titanium', price: 78990, originalPrice: 89990, image: IMG.phone1, category: 'electronics', rating: 4.9, sold: 2300, sellerId: 's1', stock: 25, discount: 12, brand: 'Apple', description: 'Latest A17 Pro chip, titanium design, 48MP camera system. 1-year warranty included.', images: [IMG.phone1, IMG.phone2, IMG.phone3] },
@@ -113,13 +190,3 @@ export const VOUCHERS = [
   { code: 'MEGA15', label: '15% OFF', desc: 'Max ₱300. Min. spend ₱1000.' },
 ];
 
-export const MOCK_USERS_KEY = 'lazada_users';
-export const MOCK_SESSION_KEY = 'lazada_session';
-export const MOCK_CART_KEY = 'lazada_cart';
-export const MOCK_ORDERS_KEY = 'lazada_orders';
-export const MOCK_SELLER_PRODUCTS_KEY = 'lazada_seller_products';
-
-// Default seeded admin
-export const DEFAULT_ADMIN = {
-  id: 'admin1', email: 'admin@lazada.ph', password: 'admin123', name: 'Admin', role: 'admin', verified: true,
-};

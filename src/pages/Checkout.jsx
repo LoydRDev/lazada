@@ -1,27 +1,33 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, CreditCard, Wallet, Truck, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { peso_fmt } from '../components/ProductCard';
 import { useToast } from '../hooks/use-toast';
 
 const Checkout = () => {
-  const { cart, user, placeOrder, clearCart } = useApp();
+  const { cart, user, placeOrder, clearCart, clearCartItems } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const [address, setAddress] = useState({ name: user?.name || '', phone: '', street: '', city: '', province: 'Metro Manila', zip: '' });
   const [payment, setPayment] = useState('cod');
+  const selectedCartIds = state?.selectedCartIds?.map((id) => String(id));
+  const checkoutItems = selectedCartIds?.length
+    ? cart.filter((item) => selectedCartIds.includes(String(item.id)))
+    : cart;
 
-  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const subtotal = checkoutItems.reduce((s, i) => s + i.price * i.qty, 0);
   const shipping = subtotal > 499 ? 0 : 50;
   const total = subtotal + shipping;
 
   const submit = async (e) => {
     e.preventDefault();
-    if (cart.length === 0) { toast({ title: 'Cart is empty' }); return; }
-    const r = await placeOrder(cart, address, payment);
+    if (checkoutItems.length === 0) { toast({ title: 'Cart is empty' }); return; }
+    const r = await placeOrder(checkoutItems, address, payment);
     if (r.ok) {
-      clearCart();
+      if (selectedCartIds?.length) clearCartItems(selectedCartIds);
+      else clearCart();
       toast({ title: 'Order placed!', description: `Order ID: ${r.order.id}` });
       navigate('/orders');
     } else {
@@ -47,9 +53,9 @@ const Checkout = () => {
           </section>
 
           <section className="bg-white rounded-lg p-5">
-            <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><Truck className="w-4 h-4 text-orange-600" />Items ({cart.length})</h3>
+            <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><Truck className="w-4 h-4 text-orange-600" />Items ({checkoutItems.length})</h3>
             <div className="divide-y divide-gray-100">
-              {cart.map(item => (
+              {checkoutItems.map(item => (
                 <div key={item.id} className="py-3 flex items-center gap-3">
                   <img src={item.image} alt={item.name} className="w-14 h-14 object-cover rounded" />
                   <div className="flex-1 text-sm text-gray-800 line-clamp-2">{item.name}</div>

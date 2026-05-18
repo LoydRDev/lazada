@@ -5,6 +5,7 @@ import { api } from './lib/api';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import AuthModal from './components/AuthModal';
+import MessagesWidget from './components/MessagesWidget';
 import Home from './pages/Home';
 import Category from './pages/Category';
 import ProductDetail from './pages/ProductDetail';
@@ -14,6 +15,7 @@ import Orders from './pages/Orders';
 import Account from './pages/Account';
 import Seller from './pages/Seller';
 import SellerLogin from './pages/SellerLogin';
+import SellerSetup from './pages/SellerSetup';
 import SellerDashboard from './pages/SellerDashboard';
 import AdminPanel from './pages/AdminPanel';
 import { AppProvider } from './context/AppContext';
@@ -28,14 +30,17 @@ const ScrollToTop = () => {
 const Layout = ({ children }) => {
   const { pathname } = useLocation();
   const authMode = pathname === '/login' ? 'login' : pathname === '/register' ? 'register' : null;
-  const isSellerStandalone = pathname === '/seller' || pathname === '/seller/login';
+  const isSellerStandalone = pathname.startsWith('/seller');
+  const isAdminStandalone = pathname === '/admin';
+  const hideStorefrontChrome = isSellerStandalone || isAdminStandalone;
 
   return (
     <div className="App">
-      {!isSellerStandalone && <Header />}
-      <main className="min-h-[calc(100vh-200px)]">{children}</main>
-      {!isSellerStandalone && <Footer />}
+      {!hideStorefrontChrome && <Header />}
+      <main className={hideStorefrontChrome ? 'min-h-screen' : 'min-h-[calc(100vh-200px)]'}>{children}</main>
+      {!hideStorefrontChrome && <Footer />}
       {authMode && <AuthModal mode={authMode} />}
+      {!hideStorefrontChrome && <MessagesWidget />}
       <Toaster />
     </div>
   );
@@ -63,7 +68,9 @@ function App() {
             <Route path="/account" element={<Account />} />
             <Route path="/seller" element={<Seller />} />
             <Route path="/seller/login" element={<SellerLogin />} />
+            <Route path="/seller/setup" element={<SellerSetup />} />
             <Route path="/seller/dashboard" element={<SellerDashboard />} />
+            <Route path="/seller/dashboard/add-product" element={<SellerDashboard />} />
             <Route path="/admin" element={<AdminPanel />} />
           </Routes>
         </Layout>

@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { CATEGORIES, DEFAULT_ADMIN, PRODUCTS } from '../src/data/mock.js';
+import { CATEGORIES, PRODUCTS } from '../src/data/catalog.js';
+import { DEFAULT_ADMIN } from '../src/data/defaultUsers.js';
 import { isDbConfigured, query } from './db.js';
 import { ensureSeedData, ensureSellerForUser, ids } from './seed.js';
 
@@ -51,6 +52,7 @@ const toUser = (row) => ({
   verified: Boolean(row.user_verified),
   phone: row.user_phone_no,
   address: userAddress(row),
+  storeName: row.sell_store_name || null,
   businessName: row.sell_b_name || null,
   idDocument: row.sell_b_permit_no || null,
   createdAt: row.date_registered,
@@ -94,7 +96,7 @@ const paymentMethod = (payment) => {
 };
 
 const userSelect = `
-  SELECT u.*, s.sell_b_name, s.sell_b_permit_no
+  SELECT u.*, s.sell_store_name, s.sell_b_name, s.sell_b_permit_no
   FROM users u
   LEFT JOIN sellers s ON s.sell_user_id = u.user_id
 `;
@@ -142,6 +144,7 @@ app.post('/api/auth/register', async (req, res, next) => {
       password,
       name,
       role,
+      storeName = null,
       businessName = null,
       idDocument = null,
       phone = '+630000000000',
@@ -151,7 +154,7 @@ app.post('/api/auth/register', async (req, res, next) => {
       lastName = null,
     } = req.body;
     if (!dbReady) {
-      if (memoryUsers.find((user) => user.email === email)) return res.status(409).json({ msg: 'Email already registered' });
+      if (memoryUsers.find((user) => user.email === email || user.phone === phone)) return res.status(409).json({ msg: 'Account already registered' });
       const user = {
         id: `u_${Date.now()}`,
         email,
@@ -161,6 +164,7 @@ app.post('/api/auth/register', async (req, res, next) => {
         verified: role === 'buyer',
         phone,
         address,
+        storeName: role === 'seller' ? storeName : null,
         businessName: role === 'seller' ? businessName : null,
         idDocument: role === 'seller' ? idDocument : null,
         createdAt: new Date().toISOString(),
@@ -170,8 +174,8 @@ app.post('/api/auth/register', async (req, res, next) => {
       return;
     }
 
-    const existing = await query('SELECT user_id FROM users WHERE user_email = :email LIMIT 1', { email });
-    if (existing.length) return res.status(409).json({ msg: 'Email already registered' });
+    const existing = await query('SELECT user_id FROM users WHERE user_email = :email OR user_phone_no = :phone LIMIT 1', { email, phone });
+    if (existing.length) return res.status(409).json({ msg: 'Account already registered' });
 
     const names = firstName || lastName
       ? {
@@ -188,6 +192,7 @@ app.post('/api/auth/register', async (req, res, next) => {
       verified: role === 'buyer',
       phone,
       address,
+      storeName: role === 'seller' ? storeName : null,
       businessName: role === 'seller' ? businessName : null,
       idDocument: role === 'seller' ? idDocument : null,
       createdAt: new Date().toISOString(),
@@ -221,9 +226,13 @@ app.post('/api/auth/register', async (req, res, next) => {
 
 app.post('/api/auth/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, identifier = email } = req.body;
     if (!dbReady) {
-      const user = memoryUsers.find((item) => item.email === email && item.password === password);
+      const user = memoryUsers.find((item) => (
+        item.email === identifier ||
+        item.phone === identifier ||
+        String(item.phone || '').replace(/^\+63/, '') === identifier
+      ) && item.password === password);
       if (!user) return res.status(401).json({ msg: 'Invalid credentials' });
       res.json({ user });
       return;
@@ -231,9 +240,10 @@ app.post('/api/auth/login', async (req, res, next) => {
 
     const rows = await query(
       `${userSelect}
-       WHERE u.user_email = :email AND u.user_pwdhash = :password
+       WHERE (u.user_email = :identifier OR u.user_phone_no = :identifier OR REPLACE(u.user_phone_no, '+63', '') = :identifier)
+         AND u.user_pwdhash = :password
        LIMIT 1`,
-      { email, password },
+      { identifier, password },
     );
     if (!rows.length) return res.status(401).json({ msg: 'Invalid credentials' });
     res.json({ user: toUser(rows[0]) });
@@ -244,13 +254,14 @@ app.post('/api/auth/login', async (req, res, next) => {
 
 app.patch('/api/users/:id', async (req, res, next) => {
   try {
-    const { verified, businessName, idDocument, name, role, sellerType } = req.body;
+    const { verified, storeName, businessName, idDocument, name, role, sellerType } = req.body;
     if (!dbReady) {
       const existing = memoryUsers.find((user) => user.id === req.params.id);
       if (!existing) return res.status(404).json({ msg: 'User not found' });
       const updated = {
         ...existing,
         verified: verified ?? existing.verified,
+        storeName: storeName ?? existing.storeName,
         businessName: businessName ?? existing.businessName,
         idDocument: idDocument ?? existing.idDocument,
         name: name ?? existing.name,
@@ -286,6 +297,7 @@ app.patch('/api/users/:id', async (req, res, next) => {
     if (updated.role === 'seller') {
       await ensureSellerForUser({
         ...updated,
+        storeName: storeName ?? updated.storeName,
         businessName: businessName ?? updated.businessName,
         idDocument: idDocument ?? updated.idDocument,
       });
@@ -299,7 +311,7 @@ app.patch('/api/users/:id', async (req, res, next) => {
         {
           id: req.params.id,
           businessName: businessName ?? null,
-          storeName: businessName || sellerType || null,
+          storeName: storeName || sellerType || null,
           idDocument: idDocument ?? null,
           status: (verified ?? updated.verified) ? 'Active' : 'Pending',
         },

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, LogOut, Search, Shield, ShoppingCart, Store, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import CategoryDropdown from './CategoryDropdown';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,14 +11,26 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 
-const authDelay = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const Header = () => {
   const { user, cart, logout } = useApp();
   const [q, setQ] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [cartPulse, setCartPulse] = useState(false);
   const navigate = useNavigate();
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+  const previousCartCount = useRef(cartCount);
+
+  useEffect(() => {
+    if (cartCount > previousCartCount.current) {
+      setCartPulse(true);
+      const timer = window.setTimeout(() => setCartPulse(false), 520);
+      previousCartCount.current = cartCount;
+      return () => window.clearTimeout(timer);
+    }
+
+    previousCartCount.current = cartCount;
+    return undefined;
+  }, [cartCount]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -28,8 +41,7 @@ const Header = () => {
     if (isLoggingOut) return;
 
     setIsLoggingOut(true);
-    await authDelay();
-    logout();
+    await logout();
     navigate('/');
     setIsLoggingOut(false);
   };
@@ -92,9 +104,12 @@ const Header = () => {
 
       <div className="lazada-mainbar">
         <div className="lazada-container lazada-mainbar-inner">
-          <Link to="/" className="lazada-brand" aria-label="Lazada home">
-            <img src="/lazada_logo.png" alt="Lazada" />
-          </Link>
+          <div className="lazada-brand-stack">
+            <Link to="/" className="lazada-brand" aria-label="Lazada home">
+              <img src="/lazada_logo.png" alt="Lazada" />
+            </Link>
+            <CategoryDropdown />
+          </div>
 
           <form onSubmit={submit} className="lazada-search" role="search">
             <div className="lazada-search-box">
@@ -110,14 +125,13 @@ const Header = () => {
             </div>
           </form>
 
-          <Link to="/cart" className="lazada-cart" aria-label="Cart">
+          <Link to="/cart" className={`lazada-cart ${cartPulse ? 'cart-pulse' : ''}`} aria-label="Cart" data-cart-target>
             <ShoppingCart className="h-8 w-8" />
             {cartCount > 0 && <span>{cartCount}</span>}
           </Link>
 
           <a href="#loans" className="lazada-loans" aria-label="Lazada loans">
-            <span>Apply Now<br />With</span>
-            <strong>Lazada Loans</strong>
+            <img src="/Lazada_loan.png" alt="Apply now with Lazada Loans" />
           </a>
         </div>
       </div>

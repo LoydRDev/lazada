@@ -1,15 +1,15 @@
 import  { useState, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { Filter, Star } from 'lucide-react';
-import { CATEGORIES } from '../data/mock';
+import { CATEGORIES, VISIBLE_CATEGORIES } from '../data/catalog';
 import { useApp } from '../context/AppContext';
-import ProductCard from '../components/ProductCard';
+import ProductCard, { ProductCardSkeleton } from '../components/ProductCard';
 
 const Category = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const q = searchParams.get('q');
-  const { sellerProducts } = useApp();
+  const { isCatalogLoading, sellerProducts } = useApp();
   const [sortBy, setSortBy] = useState('popular');
   const [minRating, setMinRating] = useState(0);
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
@@ -46,7 +46,7 @@ const Category = () => {
           <div className="mb-4">
             <div className="text-sm font-semibold text-gray-700 mb-2">Categories</div>
             <div className="space-y-1.5 text-sm">
-              {CATEGORIES.slice(0, 8).map(c => (
+              {VISIBLE_CATEGORIES.map(c => (
                 <Link key={c.id} to={`/category/${c.id}`} className={`block hover:text-orange-600 ${id === c.id ? 'text-orange-600 font-semibold' : 'text-gray-600'}`}>{c.name}</Link>
               ))}
             </div>
@@ -76,7 +76,7 @@ const Category = () => {
         {/* Results */}
         <main>
           <div className="bg-white rounded-lg p-3 mb-3 flex items-center justify-between">
-            <div className="text-sm text-gray-600">{filtered.length} results {cat && `in ${cat.name}`}</div>
+            <div className="text-sm text-gray-600">{isCatalogLoading ? 'Loading products...' : `${filtered.length} results`} {cat && `in ${cat.name}`}</div>
             <div className="flex items-center gap-2 text-sm">
               <span className="text-gray-600">Sort by:</span>
               {[['popular', 'Popular'], ['sold', 'Top Sales'], ['price_asc', 'Price ↑'], ['price_desc', 'Price ↓'], ['rating', 'Rating']].map(([v, l]) => (
@@ -85,7 +85,11 @@ const Category = () => {
             </div>
           </div>
 
-          {filtered.length === 0 ? (
+          {isCatalogLoading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {Array.from({ length: 10 }).map((_, index) => <ProductCardSkeleton key={index} />)}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="bg-white rounded-lg p-10 text-center text-gray-500">No products found. Try different filters.</div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">

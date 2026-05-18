@@ -36,6 +36,21 @@ const ProductCard = ({ product, compact = false }) => {
   );
 };
 
+export const ProductCardSkeleton = ({ compact = false }) => (
+  <article className="product-card product-card-skeleton block bg-white rounded-md overflow-hidden border border-gray-100" aria-hidden="true">
+    <div className="aspect-square skeleton-block" />
+    <div className={`p-3 ${compact ? 'space-y-1' : 'space-y-1.5'}`}>
+      <div className="skeleton-line w-full" />
+      <div className="skeleton-line w-4/5" />
+      <div className="skeleton-line price w-2/5" />
+      <div className="flex items-center justify-between">
+        <div className="skeleton-line w-1/3" />
+        <div className="skeleton-line w-1/4" />
+      </div>
+    </div>
+  </article>
+);
+
 // eslint-disable-next-line react-refresh/only-export-components
 export const peso_fmt = peso;
 export default ProductCard;

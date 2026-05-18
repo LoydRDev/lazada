@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Mail, MapPin, MessageCircle, Phone, User, X } from 'lucide-react';
+import L from 'leaflet';
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { Eye, EyeOff, Lock, Mail, MapPin, MessageCircle, Phone, Search, User, X } from 'lucide-react';
 import { FaFacebook } from 'react-icons/fa';
 import { FcGoogle } from 'react-icons/fc';
 import { useApp } from '../context/AppContext';
@@ -8,36 +11,214 @@ import { useToast } from '../hooks/use-toast';
 
 const demoOtp = '123456';
 const phPhoneDigits = 11;
+const registerDraftKey = 'lazada_register_draft';
+const defaultPin = { lat: 14.5995, lng: 120.9842 };
+const markerIcon = L.divIcon({
+  className: 'registration-map-marker',
+  html: '<span></span>',
+  iconSize: [30, 42],
+  iconAnchor: [15, 42],
+});
 const authDelay = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const loadRegisterDraft = () => {
+  try {
+    return JSON.parse(localStorage.getItem(registerDraftKey) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const saveRegisterDraft = ({ form, agreed, step }) => {
+  const safeForm = { ...form };
+  delete safeForm.password;
+  delete safeForm.rePassword;
+  delete safeForm.identifier;
+  localStorage.setItem(registerDraftKey, JSON.stringify({ form: safeForm, agreed, step }));
+};
+
+const MapClickHandler = ({ onChange }) => {
+  useMapEvents({
+    click(event) {
+      onChange({
+        lat: Number(event.latlng.lat.toFixed(6)),
+        lng: Number(event.latlng.lng.toFixed(6)),
+        label: '',
+      });
+    },
+  });
+  return null;
+};
+
+const MapCenterHandler = ({ pin }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (pin) map.setView(pin, 16);
+  }, [map, pin]);
+
+  return null;
+};
+
+const RegistrationMapPicker = ({ pin, onChange }) => {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+
+  const searchAddress = async () => {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length < 3) {
+      setSearchError('Type at least 3 characters to search.');
+      setResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError('');
+
+    try {
+      const params = new URLSearchParams({
+        format: 'json',
+        addressdetails: '1',
+        countrycodes: 'ph',
+        limit: '5',
+        q: trimmedQuery,
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+
+      if (!response.ok) throw new Error('Address search failed');
+
+      const data = await response.json();
+      setResults(data);
+      if (!data.length) setSearchError('No matching address found. Try a nearby landmark or city.');
+    } catch {
+      setSearchError('Could not search addresses right now. You can still click the map.');
+      setResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const submitSearchFromKeyboard = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      searchAddress();
+    }
+  };
+
+  const chooseResult = (result) => {
+    const address = result.address || {};
+    const city = address.city || address.town || address.municipality || address.county || address.state || '';
+    const municipality = address.municipality || address.town || address.suburb || address.city_district || address.county || city;
+
+    const pinLocation = {
+      lat: Number(Number(result.lat).toFixed(6)),
+      lng: Number(Number(result.lon).toFixed(6)),
+      label: result.display_name,
+      city,
+      municipality,
+      postalCode: address.postcode || '',
+    };
+
+    onChange(pinLocation);
+    setQuery(result.display_name);
+    setResults([]);
+    setSearchError('');
+  };
+
+  return (
+    <div className="registration-map-panel">
+      <div className="registration-map-search">
+        <Search className="h-4 w-4" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={submitSearchFromKeyboard}
+          placeholder="Search your address or nearby landmark"
+          autoComplete="street-address"
+        />
+        <button type="button" onClick={searchAddress} disabled={isSearching}>
+          {isSearching ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+      {(results.length > 0 || searchError) && (
+        <div className="registration-map-results">
+          {searchError && <p>{searchError}</p>}
+          {results.map((result) => (
+            <button type="button" key={result.place_id} onClick={() => chooseResult(result)}>
+              {result.display_name}
+            </button>
+          ))}
+        </div>
+      )}
+      <MapContainer center={pin || defaultPin} zoom={13} scrollWheelZoom={false} className="registration-map">
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <MapClickHandler onChange={onChange} />
+        <MapCenterHandler pin={pin} />
+        {pin && (
+          <Marker
+            draggable
+            icon={markerIcon}
+            position={pin}
+            eventHandlers={{
+              dragend(event) {
+                const nextPin = event.target.getLatLng();
+                onChange({
+                  lat: Number(nextPin.lat.toFixed(6)),
+                  lng: Number(nextPin.lng.toFixed(6)),
+                  label: '',
+                });
+              },
+            }}
+          />
+        )}
+      </MapContainer>
+      <div className="registration-map-meta">
+        <MapPin className="h-4 w-4" />
+        <span>{pin ? `${pin.lat.toFixed(6)}, ${pin.lng.toFixed(6)}` : 'Click the map to pin your delivery location'}</span>
+      </div>
+    </div>
+  );
+};
 
 const AuthModal = ({ mode }) => {
   const isRegister = mode === 'register';
   const { login, register } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [initialDraft] = useState(() => (isRegister ? loadRegisterDraft() : {}));
   const [loginMode, setLoginMode] = useState('password');
   const [show, setShow] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [agreed, setAgreed] = useState(false);
+  const [agreed, setAgreed] = useState(() => Boolean(initialDraft.agreed));
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => (initialDraft.step === 2 ? 2 : 1));
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    identifier: '',
-    phone: '',
-    firstName: '',
-    middleInitial: '',
-    lastName: '',
-    email: '',
-    password: '',
-    rePassword: '',
-    street: '',
-    municipality: '',
-    city: '',
-    postalCode: '',
-    mapPin: '',
+  const [form, setForm] = useState(() => {
+    return {
+      identifier: '',
+      phone: '',
+      firstName: '',
+      middleInitial: '',
+      lastName: '',
+      email: '',
+      password: '',
+      rePassword: '',
+      street: '',
+      municipality: '',
+      city: '',
+      postalCode: '',
+      mapPin: '',
+      latitude: null,
+      longitude: null,
+      ...(initialDraft.form || {}),
+    };
   });
 
   useEffect(() => {
@@ -52,6 +233,11 @@ const AuthModal = ({ mode }) => {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!isRegister) return;
+    saveRegisterDraft({ form, agreed, step });
+  }, [agreed, form, isRegister, step]);
 
   const update = (field) => (event) => {
     setForm({ ...form, [field]: event.target.value });
@@ -84,14 +270,22 @@ const AuthModal = ({ mode }) => {
     return phone.startsWith('0') ? `+63${phone.slice(1)}` : `+63${phone}`;
   };
 
-  const addressText = () => [form.street, form.municipality, form.city, form.postalCode, 'Philippines']
-    .filter(Boolean)
-    .join(', ');
+  const mapPin = form.latitude !== null && form.longitude !== null ? { lat: form.latitude, lng: form.longitude } : null;
 
-  const fillMapPin = () => {
-    const query = encodeURIComponent(addressText());
-    if (!query) return;
-    setForm({ ...form, mapPin: `https://www.google.com/maps/search/?api=1&query=${query}` });
+  const updateMapPin = (pin) => {
+    const addressLabel = pin.label || `Pinned location (${pin.lat.toFixed(6)}, ${pin.lng.toFixed(6)})`;
+
+    setForm({
+      ...form,
+      latitude: pin.lat,
+      longitude: pin.lng,
+      mapPin: `https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.lng}`,
+      street: addressLabel,
+      municipality: pin.municipality || 'Pinned on map',
+      city: pin.city || 'Pinned on map',
+      postalCode: pin.postalCode || '0000',
+    });
+    if (errors.mapPin) setErrors({ ...errors, mapPin: '' });
   };
 
   const validateStepOne = () => {
@@ -119,10 +313,7 @@ const AuthModal = ({ mode }) => {
 
   const validateStepTwo = () => {
     const nextErrors = {};
-    if (form.street.trim().length < 8) nextErrors.street = 'Enter your house number, street, or building.';
-    if (form.municipality.trim().length < 2) nextErrors.municipality = 'Enter your municipality.';
-    if (form.city.trim().length < 2) nextErrors.city = 'Enter your city.';
-    if (!/^\d{4}$/.test(form.postalCode.trim())) nextErrors.postalCode = 'Postal code must be 4 digits.';
+    if (form.latitude === null || form.longitude === null) nextErrors.mapPin = 'Please pin your delivery location on the map.';
     if (!agreed) nextErrors.agreed = 'Please agree to the Terms of Use and Privacy Policy.';
 
     setErrors(nextErrors);
@@ -246,7 +437,9 @@ const AuthModal = ({ mode }) => {
         city: form.city.trim(),
         postalCode: form.postalCode.trim(),
         country: 'Philippines',
-        mapPin: form.mapPin.trim() || null,
+        latitude: form.latitude,
+        longitude: form.longitude,
+        mapPin: form.mapPin.trim(),
       },
     });
 
@@ -257,6 +450,7 @@ const AuthModal = ({ mode }) => {
     }
 
     toast({ title: 'Account created', description: 'Your buyer account is ready.' });
+    localStorage.removeItem(registerDraftKey);
     await authDelay(1200);
     navigate('/');
   };
@@ -404,38 +598,9 @@ const AuthModal = ({ mode }) => {
                 </>
               ) : (
                 <>
-                  <p className="auth-step-title">Step 2: Full address</p>
-                  <label className={`auth-field tall ${errors.street ? 'invalid' : ''}`}>
-                    <MapPin className="h-4 w-4" />
-                    <input value={form.street} onChange={update('street')} required placeholder="House no., street, subdivision, building" autoComplete="street-address" />
-                  </label>
-                  {errors.street && <p className="auth-error">{errors.street}</p>}
-
-                  <label className={`auth-field ${errors.municipality ? 'invalid' : ''}`}>
-                    <MapPin className="h-4 w-4" />
-                    <input value={form.municipality} onChange={update('municipality')} required placeholder="Municipality" />
-                  </label>
-                  {errors.municipality && <p className="auth-error">{errors.municipality}</p>}
-
-                  <label className={`auth-field ${errors.city ? 'invalid' : ''}`}>
-                    <MapPin className="h-4 w-4" />
-                    <input value={form.city} onChange={update('city')} required placeholder="City" autoComplete="address-level2" />
-                  </label>
-                  {errors.city && <p className="auth-error">{errors.city}</p>}
-
-                  <label className={`auth-field ${errors.postalCode ? 'invalid' : ''}`}>
-                    <MapPin className="h-4 w-4" />
-                    <input value={form.postalCode} onChange={(event) => setForm({ ...form, postalCode: event.target.value.replace(/\D/g, '').slice(0, 4) })} required inputMode="numeric" maxLength={4} placeholder="Postal code" autoComplete="postal-code" />
-                  </label>
-                  {errors.postalCode && <p className="auth-error">{errors.postalCode}</p>}
-
-                  <label className="auth-field">
-                    <MapPin className="h-4 w-4" />
-                    <input value={form.mapPin} onChange={update('mapPin')} placeholder="Map pin link (optional)" />
-                    <button type="button" aria-label="Generate map pin from address" onClick={fillMapPin}>
-                      Pin
-                    </button>
-                  </label>
+                  <p className="auth-step-title">Step 2: Pin delivery location</p>
+                  <RegistrationMapPicker pin={mapPin} onChange={updateMapPin} />
+                  {errors.mapPin && <p className="auth-error">{errors.mapPin}</p>}
 
                   <label className="auth-check">
                     <input type="checkbox" checked={agreed} onChange={(event) => {

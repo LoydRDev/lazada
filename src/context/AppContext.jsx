@@ -1,5 +1,7 @@
 import  { createContext, useContext, useEffect, useState } from 'react';
-import { MOCK_SESSION_KEY, MOCK_CART_KEY, DEFAULT_ADMIN, PRODUCTS } from '../data/mock';
+import { PRODUCTS } from '../data/catalog';
+import { DEFAULT_ADMIN } from '../data/defaultUsers';
+import { MOCK_CART_KEY, MOCK_SESSION_KEY } from '../data/storageKeys';
 import { api } from '../lib/api';
 
 const AppContext = createContext(null);
@@ -16,8 +18,9 @@ export const AppProvider = ({ children }) => {
   const [user, setUser] = useState(() => load(MOCK_SESSION_KEY, null));
   const [cart, setCart] = useState(() => load(MOCK_CART_KEY, []));
   const [orders, setOrders] = useState([]);
-  const [sellerProducts, setSellerProducts] = useState(PRODUCTS);
+  const [sellerProducts, setSellerProducts] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
 
   useEffect(() => {
     api.get('/bootstrap')
@@ -27,16 +30,20 @@ export const AppProvider = ({ children }) => {
         setOrders(data.orders || []);
         setIsDbConnected(true);
       })
-      .catch(() => setIsDbConnected(false));
+      .catch(() => {
+        setSellerProducts(PRODUCTS);
+        setIsDbConnected(false);
+      })
+      .finally(() => setIsCatalogLoading(false));
   }, []);
 
   useEffect(() => save(MOCK_SESSION_KEY, user), [user]);
   useEffect(() => save(MOCK_CART_KEY, cart), [cart]);
 
-  const register = async ({ email, password, name, role, businessName, idDocument, phone, address, firstName, middleInitial, lastName }) => {
-    if (users.find(u => u.email === email)) return { ok: false, msg: 'Email already registered' };
+  const register = async ({ email, password, name, role, storeName, businessName, idDocument, phone, address, firstName, middleInitial, lastName }) => {
+    if (users.find(u => u.email === email || (phone && u.phone === phone))) return { ok: false, msg: 'Account already registered' };
     try {
-      const { data } = await api.post('/auth/register', { email, password, name, role, businessName, idDocument, phone, address, firstName, middleInitial, lastName });
+      const { data } = await api.post('/auth/register', { email, password, name, role, storeName, businessName, idDocument, phone, address, firstName, middleInitial, lastName });
       setUsers([...users, data.user]);
       setUser(data.user);
       return { ok: true, user: data.user };
@@ -47,7 +54,7 @@ export const AppProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const { data } = await api.post('/auth/login', { email, password });
+      const { data } = await api.post('/auth/login', { email, password, identifier: email });
       setUser(data.user);
       return { ok: true, user: data.user };
     } catch (error) {
@@ -55,14 +62,22 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const logout = () => setUser(null);
+  const logout = async (delay = 1000) => {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    setUser(null);
+  };
 
   const updateUser = async (patch) => {
-    if (!user) return;
-    const { data } = await api.patch(`/users/${user.id}`, patch);
-    const updated = { ...user, ...data.user };
-    setUser(updated);
-    setUsers(users.map(u => u.id === user.id ? updated : u));
+    if (!user) return { ok: false, msg: 'Not logged in' };
+    try {
+      const { data } = await api.patch(`/users/${user.id}`, patch);
+      const updated = { ...user, ...data.user };
+      setUser(updated);
+      setUsers(users.map(u => u.id === user.id ? updated : u));
+      return { ok: true, user: updated };
+    } catch (error) {
+      return { ok: false, msg: error.response?.data?.msg || 'Could not update account' };
+    }
   };
 
   const verifySeller = async (sellerId, approved) => {
@@ -72,13 +87,17 @@ export const AppProvider = ({ children }) => {
   };
 
   const addToCart = (product, qty = 1) => {
-    const existing = cart.find(c => c.id === product.id);
-    if (existing) setCart(cart.map(c => c.id === product.id ? { ...c, qty: c.qty + qty } : c));
+    const existing = cart.find(c => String(c.id) === String(product.id));
+    if (existing) setCart(cart.map(c => String(c.id) === String(product.id) ? { ...c, qty: c.qty + qty } : c));
     else setCart([...cart, { id: product.id, name: product.name, price: product.price, image: product.image, qty, sellerId: product.sellerId }]);
   };
-  const updateCartQty = (id, qty) => setCart(cart.map(c => c.id === id ? { ...c, qty: Math.max(1, qty) } : c));
-  const removeFromCart = (id) => setCart(cart.filter(c => c.id !== id));
+  const updateCartQty = (id, qty) => setCart(cart.map(c => String(c.id) === String(id) ? { ...c, qty: Math.max(1, qty) } : c));
+  const removeFromCart = (id) => setCart(cart.filter(c => String(c.id) !== String(id)));
   const clearCart = () => setCart([]);
+  const clearCartItems = (ids) => {
+    const idSet = new Set(ids.map((id) => String(id)));
+    setCart(cart.filter((item) => !idSet.has(String(item.id))));
+  };
 
   const placeOrder = async (items, address, payment) => {
     if (!user) return { ok: false, msg: 'Not logged in' };
@@ -101,13 +120,13 @@ export const AppProvider = ({ children }) => {
     setSellerProducts(sellerProducts.filter(p => p.id !== id));
   };
 
-  const getProductById = (id) => sellerProducts.find(p => p.id === id);
+  const getProductById = (id) => sellerProducts.find(p => String(p.id) === String(id));
 
   return (
     <AppContext.Provider value={{
-      user, users, cart, orders, sellerProducts, isDbConnected,
+      user, users, cart, orders, sellerProducts, isDbConnected, isCatalogLoading,
       register, login, logout, updateUser, verifySeller,
-      addToCart, updateCartQty, removeFromCart, clearCart,
+      addToCart, updateCartQty, removeFromCart, clearCart, clearCartItems,
       placeOrder, addSellerProduct, removeSellerProduct, getProductById,
     }}>
       {children}
