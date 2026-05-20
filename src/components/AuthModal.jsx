@@ -21,6 +21,21 @@ const markerIcon = L.divIcon({
 });
 const authDelay = (ms = 1000) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const extractAddressParts = (address = {}, fallbackLabel = '') => {
+  const street = [address.house_number, address.road].filter(Boolean).join(' ');
+  const city = address.city || address.town || address.village || address.municipality || '';
+  const municipality = address.municipality || address.city_district || address.suburb || address.town || address.village || address.county || city;
+
+  return {
+    street: street || address.neighbourhood || address.suburb || fallbackLabel,
+    municipality,
+    city,
+    province: address.province || address.state || address.region || '',
+    country: address.country || 'Philippines',
+    postalCode: address.postcode || '',
+  };
+};
+
 const loadRegisterDraft = () => {
   try {
     return JSON.parse(localStorage.getItem(registerDraftKey) || '{}');
@@ -65,6 +80,7 @@ const RegistrationMapPicker = ({ pin, onChange }) => {
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [pinStatus, setPinStatus] = useState('');
 
   const searchAddress = async () => {
     const trimmedQuery = query.trim();
@@ -109,22 +125,55 @@ const RegistrationMapPicker = ({ pin, onChange }) => {
 
   const chooseResult = (result) => {
     const address = result.address || {};
-    const city = address.city || address.town || address.municipality || address.county || address.state || '';
-    const municipality = address.municipality || address.town || address.suburb || address.city_district || address.county || city;
+    const addressParts = extractAddressParts(address, result.display_name);
 
     const pinLocation = {
       lat: Number(Number(result.lat).toFixed(6)),
       lng: Number(Number(result.lon).toFixed(6)),
       label: result.display_name,
-      city,
-      municipality,
-      postalCode: address.postcode || '',
+      ...addressParts,
     };
 
     onChange(pinLocation);
     setQuery(result.display_name);
     setResults([]);
     setSearchError('');
+    setPinStatus('Address fields updated from the selected location.');
+  };
+
+  const chooseMapPin = async (pinLocation) => {
+    const nextPin = {
+      lat: Number(pinLocation.lat.toFixed(6)),
+      lng: Number(pinLocation.lng.toFixed(6)),
+      label: pinLocation.label || '',
+    };
+
+    setPinStatus('Reading address from pinned location...');
+
+    try {
+      const params = new URLSearchParams({
+        format: 'json',
+        addressdetails: '1',
+        lat: String(nextPin.lat),
+        lon: String(nextPin.lng),
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`);
+
+      if (!response.ok) throw new Error('Address lookup failed');
+
+      const data = await response.json();
+      const label = data.display_name || nextPin.label;
+      onChange({
+        ...nextPin,
+        label,
+        ...extractAddressParts(data.address || {}, label),
+      });
+      setQuery(label);
+      setPinStatus('Address fields updated from the pinned location.');
+    } catch {
+      onChange(nextPin);
+      setPinStatus('Pinned location saved, but address details could not be read automatically.');
+    }
   };
 
   return (
@@ -157,7 +206,7 @@ const RegistrationMapPicker = ({ pin, onChange }) => {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapClickHandler onChange={onChange} />
+        <MapClickHandler onChange={chooseMapPin} />
         <MapCenterHandler pin={pin} />
         {pin && (
           <Marker
@@ -167,7 +216,7 @@ const RegistrationMapPicker = ({ pin, onChange }) => {
             eventHandlers={{
               dragend(event) {
                 const nextPin = event.target.getLatLng();
-                onChange({
+                chooseMapPin({
                   lat: Number(nextPin.lat.toFixed(6)),
                   lng: Number(nextPin.lng.toFixed(6)),
                   label: '',
@@ -179,7 +228,7 @@ const RegistrationMapPicker = ({ pin, onChange }) => {
       </MapContainer>
       <div className="registration-map-meta">
         <MapPin className="h-4 w-4" />
-        <span>{pin ? `${pin.lat.toFixed(6)}, ${pin.lng.toFixed(6)}` : 'Click the map to pin your delivery location'}</span>
+        <span>{pin ? `${pin.lat.toFixed(6)}, ${pin.lng.toFixed(6)}${pinStatus ? ` - ${pinStatus}` : ''}` : 'Search or click the map to autofill your address'}</span>
       </div>
     </div>
   );
@@ -194,6 +243,7 @@ const AuthModal = ({ mode }) => {
   const [loginMode, setLoginMode] = useState('password');
   const [show, setShow] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showAddressMap, setShowAddressMap] = useState(false);
   const [agreed, setAgreed] = useState(() => Boolean(initialDraft.agreed));
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -205,7 +255,6 @@ const AuthModal = ({ mode }) => {
       identifier: '',
       phone: '',
       firstName: '',
-      middleInitial: '',
       lastName: '',
       email: '',
       password: '',
@@ -213,7 +262,9 @@ const AuthModal = ({ mode }) => {
       street: '',
       municipality: '',
       city: '',
+      province: '',
       postalCode: '',
+      country: 'Philippines',
       mapPin: '',
       latitude: null,
       longitude: null,
@@ -249,14 +300,6 @@ const AuthModal = ({ mode }) => {
     if (errors[field]) setErrors({ ...errors, [field]: '' });
   };
 
-  const updateMiddleInitial = (event) => {
-    setForm({
-      ...form,
-      middleInitial: event.target.value.replace(/[^A-Za-z]/g, '').slice(0, 1).toUpperCase(),
-    });
-    if (errors.middleInitial) setErrors({ ...errors, middleInitial: '' });
-  };
-
   const updatePhone = (event) => {
     const digitsOnly = event.target.value.replace(/\D/g, '').slice(0, phPhoneDigits);
     setForm({ ...form, phone: digitsOnly });
@@ -274,29 +317,32 @@ const AuthModal = ({ mode }) => {
 
   const updateMapPin = (pin) => {
     const addressLabel = pin.label || `Pinned location (${pin.lat.toFixed(6)}, ${pin.lng.toFixed(6)})`;
+    const addressErrors = ['street', 'municipality', 'city', 'province', 'postalCode', 'country', 'mapPin'];
 
     setForm({
       ...form,
       latitude: pin.lat,
       longitude: pin.lng,
       mapPin: `https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.lng}`,
-      street: addressLabel,
-      municipality: pin.municipality || 'Pinned on map',
-      city: pin.city || 'Pinned on map',
-      postalCode: pin.postalCode || '0000',
+      street: pin.street || addressLabel,
+      municipality: pin.municipality || form.municipality,
+      city: pin.city || form.city,
+      province: pin.province || form.province,
+      postalCode: pin.postalCode || form.postalCode,
+      country: pin.country || form.country || 'Philippines',
     });
-    if (errors.mapPin) setErrors({ ...errors, mapPin: '' });
+    if (addressErrors.some((field) => errors[field])) {
+      setErrors(Object.fromEntries(Object.entries(errors).filter(([field]) => !addressErrors.includes(field))));
+    }
   };
 
   const validateStepOne = () => {
     const nextErrors = {};
     const namePattern = /^[A-Za-z][A-Za-z\s'.-]{1,49}$/;
-    const middlePattern = /^[A-Za-z]?$/;
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
     if (!namePattern.test(form.firstName.trim())) nextErrors.firstName = 'Enter a valid first name.';
-    if (!middlePattern.test(form.middleInitial.trim())) nextErrors.middleInitial = 'Use one letter only.';
     if (!namePattern.test(form.lastName.trim())) nextErrors.lastName = 'Enter a valid last name.';
     if (!emailPattern.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.';
     if (normalizedPhone().length !== phPhoneDigits || !normalizedPhone().startsWith('09')) {
@@ -313,7 +359,12 @@ const AuthModal = ({ mode }) => {
 
   const validateStepTwo = () => {
     const nextErrors = {};
-    if (form.latitude === null || form.longitude === null) nextErrors.mapPin = 'Please pin your delivery location on the map.';
+    if (!form.street.trim()) nextErrors.street = 'Enter your street address.';
+    if (!form.country.trim()) nextErrors.country = 'Enter your country.';
+    if (!form.province.trim()) nextErrors.province = 'Enter your province.';
+    if (!form.city.trim()) nextErrors.city = 'Enter your city.';
+    if (!form.municipality.trim()) nextErrors.municipality = 'Enter your municipality.';
+    if (!form.postalCode.trim()) nextErrors.postalCode = 'Enter your postal code.';
     if (!agreed) nextErrors.agreed = 'Please agree to the Terms of Use and Privacy Policy.';
 
     setErrors(nextErrors);
@@ -425,18 +476,18 @@ const AuthModal = ({ mode }) => {
     const result = await register({
       email: form.email.trim(),
       password: form.password,
-      name: [form.firstName, form.middleInitial, form.lastName].filter(Boolean).join(' '),
+      name: [form.firstName, form.lastName].filter(Boolean).join(' '),
       role: 'buyer',
       phone: internationalPhone(),
       firstName: form.firstName.trim(),
-      middleInitial: form.middleInitial.trim().toUpperCase(),
       lastName: form.lastName.trim(),
       address: {
         street: form.street.trim(),
         municipality: form.municipality.trim(),
         city: form.city.trim(),
         postalCode: form.postalCode.trim(),
-        country: 'Philippines',
+        province: form.province.trim(),
+        country: form.country.trim(),
         latitude: form.latitude,
         longitude: form.longitude,
         mapPin: form.mapPin.trim(),
@@ -535,23 +586,23 @@ const AuthModal = ({ mode }) => {
               {step === 1 ? (
                 <>
                   <p className="auth-step-title">Step 1: Personal information</p>
-                  <label className={`auth-field ${errors.firstName ? 'invalid' : ''}`}>
-                    <User className="h-4 w-4" />
-                    <input value={form.firstName} onChange={updateName('firstName')} required placeholder="First Name" autoComplete="given-name" />
-                  </label>
-                  {errors.firstName && <p className="auth-error">{errors.firstName}</p>}
+                  <div className="auth-name-row">
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.firstName ? 'invalid' : ''}`}>
+                        <User className="h-4 w-4" />
+                        <input value={form.firstName} onChange={updateName('firstName')} required placeholder="First Name" autoComplete="given-name" />
+                      </label>
+                      {errors.firstName && <p className="auth-error">{errors.firstName}</p>}
+                    </div>
 
-                  <label className={`auth-field ${errors.middleInitial ? 'invalid' : ''}`}>
-                    <User className="h-4 w-4" />
-                    <input value={form.middleInitial} onChange={updateMiddleInitial} placeholder="Middle Initial (optional)" maxLength={1} />
-                  </label>
-                  {errors.middleInitial && <p className="auth-error">{errors.middleInitial}</p>}
-
-                  <label className={`auth-field ${errors.lastName ? 'invalid' : ''}`}>
-                    <User className="h-4 w-4" />
-                    <input value={form.lastName} onChange={updateName('lastName')} required placeholder="Last Name" autoComplete="family-name" />
-                  </label>
-                  {errors.lastName && <p className="auth-error">{errors.lastName}</p>}
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.lastName ? 'invalid' : ''}`}>
+                        <User className="h-4 w-4" />
+                        <input value={form.lastName} onChange={updateName('lastName')} required placeholder="Last Name" autoComplete="family-name" />
+                      </label>
+                      {errors.lastName && <p className="auth-error">{errors.lastName}</p>}
+                    </div>
+                  </div>
 
                   <label className={`auth-field ${errors.email ? 'invalid' : ''}`}>
                     <Mail className="h-4 w-4" />
@@ -598,9 +649,57 @@ const AuthModal = ({ mode }) => {
                 </>
               ) : (
                 <>
-                  <p className="auth-step-title">Step 2: Pin delivery location</p>
-                  <RegistrationMapPicker pin={mapPin} onChange={updateMapPin} />
-                  {errors.mapPin && <p className="auth-error">{errors.mapPin}</p>}
+                  <p className="auth-step-title">Step 2: Delivery address</p>
+
+                  <label className={`auth-field ${errors.street ? 'invalid' : ''}`}>
+                    <MapPin className="h-4 w-4" />
+                    <input value={form.street} onChange={update('street')} required placeholder="Street address / Building / Barangay" autoComplete="street-address" />
+                  </label>
+                  {errors.street && <p className="auth-error">{errors.street}</p>}
+
+                  <div className="auth-address-grid">
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.country ? 'invalid' : ''}`}>
+                        <input value={form.country} onChange={update('country')} required placeholder="Country" autoComplete="country-name" />
+                      </label>
+                      {errors.country && <p className="auth-error">{errors.country}</p>}
+                    </div>
+
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.province ? 'invalid' : ''}`}>
+                        <input value={form.province} onChange={update('province')} required placeholder="Province" autoComplete="address-level1" />
+                      </label>
+                      {errors.province && <p className="auth-error">{errors.province}</p>}
+                    </div>
+
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.city ? 'invalid' : ''}`}>
+                        <input value={form.city} onChange={update('city')} required placeholder="City" autoComplete="address-level2" />
+                      </label>
+                      {errors.city && <p className="auth-error">{errors.city}</p>}
+                    </div>
+
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.municipality ? 'invalid' : ''}`}>
+                        <input value={form.municipality} onChange={update('municipality')} required placeholder="Municipality" autoComplete="address-level3" />
+                      </label>
+                      {errors.municipality && <p className="auth-error">{errors.municipality}</p>}
+                    </div>
+
+                    <div className="auth-field-group">
+                      <label className={`auth-field ${errors.postalCode ? 'invalid' : ''}`}>
+                        <input value={form.postalCode} onChange={update('postalCode')} required placeholder="Postal Code" autoComplete="postal-code" />
+                      </label>
+                      {errors.postalCode && <p className="auth-error">{errors.postalCode}</p>}
+                    </div>
+                  </div>
+
+                  <button type="button" className="auth-map-toggle" onClick={() => setShowAddressMap(!showAddressMap)}>
+                    <MapPin className="h-4 w-4" />
+                    {showAddressMap ? 'Hide map' : 'Search and pin with map'}
+                  </button>
+
+                  {showAddressMap && <RegistrationMapPicker pin={mapPin} onChange={updateMapPin} />}
 
                   <label className="auth-check">
                     <input type="checkbox" checked={agreed} onChange={(event) => {

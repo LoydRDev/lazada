@@ -14,7 +14,7 @@ let memoryProducts = PRODUCTS;
 let memoryOrders = [];
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '8mb' }));
 
 const normalizeRole = (role = 'buyer') => {
   const value = String(role).toLowerCase();
@@ -58,22 +58,30 @@ const toUser = (row) => ({
   createdAt: row.date_registered,
 });
 
-const toProduct = (row) => ({
-  id: row.prod_id,
-  name: row.prod_name,
-  price: Number(row.prod_price),
-  originalPrice: Number(row.prod_original_price),
-  image: row.prod_image,
-  category: row.cat_slug || CATEGORIES[0].id,
-  rating: Number(row.prod_avr_rating || 0),
-  sold: Number(row.prod_total_sold || 0),
-  sellerId: row.prod_sell_id,
-  stock: Number(row.prod_stock_qty),
-  discount: Number(row.prod_discount_percent || 0),
-  brand: row.prod_brand || '',
-  description: row.prod_desc,
-  images: typeof row.prod_images === 'string' ? JSON.parse(row.prod_images || '[]') : row.prod_images || [],
-});
+const toProduct = (row) => {
+  const specs = typeof row.prod_specs === 'string' ? JSON.parse(row.prod_specs || '{}') : row.prod_specs || {};
+
+  return {
+    id: row.prod_id,
+    name: row.prod_name,
+    price: Number(row.prod_price),
+    originalPrice: Number(row.prod_original_price),
+    image: row.prod_image,
+    category: row.cat_slug || CATEGORIES[0].id,
+    subcategory: specs.subcategory || '',
+    rating: Number(row.prod_avr_rating || 0),
+    sold: Number(row.prod_total_sold || 0),
+    sellerId: row.prod_sell_id,
+    stock: Number(row.prod_stock_qty),
+    discount: Number(row.prod_discount_percent || 0),
+    brand: row.prod_brand || '',
+    description: row.prod_desc,
+    images: typeof row.prod_images === 'string' ? JSON.parse(row.prod_images || '[]') : row.prod_images || [],
+    specs,
+    specGroups: specs.specGroups || [],
+    variants: specs.variants || [],
+  };
+};
 
 const toOrder = (row) => ({
   id: row.order_id,
@@ -335,6 +343,12 @@ app.post('/api/products', async (req, res, next) => {
       images: req.body.images || [req.body.image],
       originalPrice: req.body.originalPrice || req.body.price,
       discount: req.body.discount || 0,
+      specs: {
+        ...(req.body.specs || {}),
+        subcategory: req.body.subcategory || req.body.specs?.subcategory || '',
+        specGroups: req.body.specGroups || req.body.specs?.specGroups || [],
+        variants: req.body.variants || req.body.specs?.variants || [],
+      },
     };
     if (!dbReady) {
       memoryProducts = [product, ...memoryProducts];

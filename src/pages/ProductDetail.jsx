@@ -44,6 +44,15 @@ const getPhoneColorOptions = (product) => {
 };
 
 const getProductSpecGroups = (product) => {
+  if (Array.isArray(product.specGroups) && product.specGroups.length) return product.specGroups;
+  if (Array.isArray(product.variants) && product.variants.length) {
+    const labels = Object.keys(product.variants[0].attributes || {});
+    return labels.map((label) => ({
+      label,
+      values: uniqueOptions(product.variants.map((variant) => variant.attributes?.[label])),
+    }));
+  }
+
   const text = textFor(product);
   const category = String(product.category || '').toLowerCase();
   const isPhone = ['iphone', 'galaxy', 'redmi', 'smartphone', 'phone'].some((term) => text.includes(term));
@@ -117,6 +126,11 @@ const getProductTrail = (product) => {
     trail.push({ label, to: `/category/${product.category}?q=${encodeURIComponent(label)}` });
   };
 
+  if (product.subcategory) {
+    addSubcategory(product.subcategory);
+    return trail;
+  }
+
   if (['iphone', 'galaxy', 'redmi', 'smartphone', 'phone'].some((term) => text.includes(term))) {
     addSubcategory('Mobiles');
     addSubcategory('Smartphones');
@@ -149,6 +163,9 @@ const getProductTrail = (product) => {
 
 const getSpecificationRows = (product, specGroups, seller, categoryLabel) => {
   const text = textFor(product);
+  const sellerSpecs = Object.entries(product.specs || {})
+    .filter(([key, value]) => !['promotionImage', 'videoName', 'variants', 'specGroups'].includes(key) && value)
+    .map(([key, value]) => [key, String(value)]);
   const rows = [
     ['Brand', product.brand || 'Generic'],
     ['Category', categoryLabel],
@@ -159,6 +176,9 @@ const getSpecificationRows = (product, specGroups, seller, categoryLabel) => {
   ];
 
   specGroups.forEach((group) => rows.push([group.label, group.values.join(', ')]));
+  sellerSpecs.forEach((row) => {
+    if (!rows.some(([label]) => label === row[0])) rows.push(row);
+  });
 
   if (['iphone', 'galaxy', 'redmi', 'smartphone', 'phone'].some((term) => text.includes(term))) {
     rows.push(['Phone Type', 'Smartphone']);
@@ -280,6 +300,15 @@ const ProductDetail = () => {
   const receiveDate = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(
     estimatedDeliveryDate,
   );
+  const selectedVariant = Array.isArray(product.variants) && product.variants.length
+    ? product.variants.find((variant) => Object.entries(variant.attributes || {}).every(([label, value]) => {
+        const group = specGroups.find((item) => item.label === label);
+        const selectedValue = selectedSpecs[label] || group?.values?.[0];
+        return selectedValue === value;
+      })) || product.variants[0]
+    : null;
+  const activePrice = Number(selectedVariant?.price || product.price);
+  const activeStock = Number(selectedVariant?.stock ?? product.stock);
 
   const requireBuyer = () => {
     if (!user) {
@@ -296,7 +325,13 @@ const ProductDetail = () => {
   const handleAdd = () => {
     if (!requireBuyer()) return;
     launchCartFlyAnimation();
-    addToCart(product, qty);
+    addToCart({
+      ...product,
+      id: selectedVariant ? `${product.id}-${selectedVariant.sku}` : product.id,
+      name: selectedVariant ? `${product.name} (${Object.values(selectedVariant.attributes || {}).join(' / ')})` : product.name,
+      price: activePrice,
+      stock: activeStock,
+    }, qty);
     setAddAnimation(true);
     window.setTimeout(() => setAddAnimation(false), 900);
     toast({ title: 'Added to cart!', description: `${qty} x ${product.name}` });
@@ -340,7 +375,13 @@ const ProductDetail = () => {
 
   const handleBuy = () => {
     if (!requireBuyer()) return;
-    addToCart(product, qty);
+    addToCart({
+      ...product,
+      id: selectedVariant ? `${product.id}-${selectedVariant.sku}` : product.id,
+      name: selectedVariant ? `${product.name} (${Object.values(selectedVariant.attributes || {}).join(' / ')})` : product.name,
+      price: activePrice,
+      stock: activeStock,
+    }, qty);
     navigate('/checkout');
   };
 
@@ -400,8 +441,8 @@ const ProductDetail = () => {
           </div>
 
           <div className="product-price-block">
-            <strong>{peso_fmt(product.price)}</strong>
-            {product.originalPrice > product.price && <s>{peso_fmt(product.originalPrice)}</s>}
+            <strong>{peso_fmt(activePrice)}</strong>
+            {product.originalPrice > activePrice && <s>{peso_fmt(product.originalPrice)}</s>}
             {product.discount > 0 && <span>-{product.discount}%</span>}
           </div>
 
@@ -456,7 +497,7 @@ const ProductDetail = () => {
             <div className="product-qty">
               <button type="button" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></button>
               <b>{qty}</b>
-              <button type="button" onClick={() => setQty(Math.min(product.stock || 99, qty + 1))}><Plus className="h-4 w-4" /></button>
+              <button type="button" onClick={() => setQty(Math.min(activeStock || 99, qty + 1))}><Plus className="h-4 w-4" /></button>
             </div>
           </div>
 

@@ -1586,6 +1586,41 @@ body.modal-open {
   font-weight: 800;
 }
 
+.auth-name-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-address-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-map-toggle {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--laz-orange);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--laz-orange);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.auth-field-group {
+  display: grid;
+  gap: 7px;
+}
+
+.auth-field-group .auth-error {
+  margin-top: 0;
+}
+
 .auth-error {
   margin-top: -7px;
   color: #dc2626;
@@ -3901,6 +3936,7 @@ body.modal-open {
 .seller-add-image-row,
 .seller-add-promo-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   margin-top: 8px;
@@ -3909,14 +3945,52 @@ body.modal-open {
   padding: 16px;
 }
 
-.seller-add-image-row img {
-  width: 60px;
-  height: 60px;
+.seller-add-image-preview,
+.seller-add-promo-preview {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid #d7deeb;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.seller-add-image-preview img,
+.seller-add-promo-preview img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
 }
 
-.seller-add-image-row button,
-.seller-add-promo-row button {
+.seller-add-image-preview button {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.78);
+  color: #fff;
+}
+
+.seller-add-promo-preview {
+  width: 112px;
+}
+
+.seller-add-promo-preview button {
+  position: absolute;
+  inset: auto 6px 6px;
+  height: 24px;
+  border-radius: 5px;
+  background: rgba(17, 24, 39, 0.78);
+  color: #fff;
+  font-size: 11px;
+}
+
+.seller-add-upload-tile {
   display: grid;
   width: 60px;
   height: 60px;
@@ -3924,6 +3998,12 @@ body.modal-open {
   border: 1px dashed #8fa0bd;
   border-radius: 7px;
   color: #7c879c;
+  cursor: pointer;
+}
+
+.seller-add-upload-tile input,
+.seller-add-video-upload input {
+  display: none;
 }
 
 .seller-add-promo-row {
@@ -3962,6 +4042,45 @@ body.modal-open {
   accent-color: #2673f3;
 }
 
+.seller-add-video-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 9px;
+}
+
+.seller-add-video-upload {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #9bb9ff;
+  border-radius: 7px;
+  color: #126cff;
+  padding: 0 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.seller-add-video-row span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: #303846;
+  font-size: 13px;
+}
+
+.seller-add-video-row span button {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.seller-add-video-row small {
+  color: #6f798d;
+}
+
 .seller-add-two-col,
 .seller-add-stock-grid {
   display: grid;
@@ -3983,6 +4102,60 @@ body.modal-open {
   border-radius: 14px;
   padding: 14px;
   background: #fafcff;
+}
+
+.seller-add-variant-options {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.seller-add-variant-options > div {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  border: 1px solid #edf0f5;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fafcff;
+}
+
+.seller-add-variant-options label {
+  display: grid;
+  gap: 7px;
+  color: #2d3340;
+  font-size: 14px;
+}
+
+.seller-add-variant-options > div > button {
+  height: 38px;
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.seller-add-variant-table {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.seller-add-variant-table table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.seller-add-variant-table th,
+.seller-add-variant-table td {
+  border-bottom: 1px solid #edf0f5;
+  padding: 9px;
+  text-align: left;
+}
+
+.seller-add-variant-table th {
+  color: #667085;
+  font-size: 12px;
 }
 
 .seller-add-dimensions {
@@ -5857,6 +6030,18 @@ body.modal-open {
 
   .messages-panel-body {
     grid-template-columns: 42% 1fr;
+  }
+
+  .auth-name-row {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-address-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-add-variant-options > div {
+    grid-template-columns: 1fr;
   }
 
   .seller-setup-shell {

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Download,
   Edit3,
+  ImagePlus,
   Info,
   Languages,
   Megaphone,
@@ -47,9 +48,108 @@ const defaultForm = {
   stock: '',
   brand: '',
   category: 'electronics',
-  image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e',
+  subcategory: '',
+  images: [],
+  promotionImage: '',
+  promotionImageName: '',
+  videoName: '',
+  videoType: '',
+  specs: {},
+  variantOptions: [],
+  variants: [],
   description: '',
 };
+
+const specificationTemplates = {
+  electronics: {
+    default: ['Model', 'Warranty Type', 'Color Family', 'Storage Capacity'],
+    Mobiles: ['Model', 'Phone Type', 'Storage Capacity', 'RAM Memory', 'Color Family', 'Network Connections'],
+    Laptops: ['Model', 'Processor Type', 'RAM Memory', 'Storage Capacity', 'Screen Size', 'Operating System'],
+    'Digital Cameras': ['Model', 'Camera Type', 'Megapixels', 'Lens Mount', 'Video Resolution'],
+    'Action/Video Cameras': ['Model', 'Video Resolution', 'Water Resistance', 'Battery Life'],
+  },
+  accessories: {
+    default: ['Model', 'Color Family', 'Compatibility', 'Warranty Type'],
+    Audio: ['Model', 'Connectivity', 'Color Family', 'Battery Life', 'Noise Cancellation'],
+    'Mobile Accessories': ['Model', 'Compatibility', 'Material', 'Color Family'],
+  },
+  fashion: { default: ['Material', 'Color Family', 'Pattern', 'Fit Type', 'Care Label'] },
+  men: { default: ['Material', 'Color Family', 'Size', 'Pattern', 'Fit Type'] },
+  kids: { default: ['Material', 'Color Family', 'Size', 'Age Range', 'Care Label'] },
+  beauty: { default: ['Skin Type', 'Shade', 'Volume', 'Formulation', 'Shelf Life'] },
+  groceries: { default: ['Flavor', 'Pack Size', 'Weight', 'Ingredients', 'Expiration Date'] },
+  home: { default: ['Material', 'Color Family', 'Dimensions', 'Room Type', 'Warranty Type'] },
+  tv: { default: ['Model', 'Power Consumption', 'Warranty Type', 'Color Family'] },
+  sports: { default: ['Material', 'Color Family', 'Size', 'Sport Type', 'Warranty Type'] },
+  auto: { default: ['Compatibility', 'Material', 'Color Family', 'Warranty Type'] },
+};
+
+const variantSuggestions = {
+  electronics: ['Color Family', 'Storage Capacity'],
+  accessories: ['Color Family', 'Connectivity'],
+  fashion: ['Color Family', 'Size'],
+  men: ['Color Family', 'Size'],
+  kids: ['Color Family', 'Size'],
+  beauty: ['Shade', 'Size'],
+  groceries: ['Flavor', 'Pack Size'],
+  home: ['Color Family', 'Size'],
+  tv: ['Color Family', 'Plug Type'],
+  sports: ['Color Family', 'Size'],
+  auto: ['Color Family', 'Compatibility'],
+};
+
+const getSpecFields = (categoryId, subcategory) => {
+  const categoryTemplate = specificationTemplates[categoryId] || {};
+  return categoryTemplate[subcategory] || categoryTemplate.default || ['Model', 'Material', 'Color Family', 'Warranty Type'];
+};
+
+const getVariantOptionLabel = (categoryId, index) => {
+  const labels = variantSuggestions[categoryId] || ['Variant', 'Size'];
+  return labels[index] || `Option ${index + 1}`;
+};
+
+const splitVariantValues = (value) => value.split(',').map((item) => item.trim()).filter(Boolean);
+
+const buildVariantRows = (options, basePrice, baseStock) => {
+  const activeOptions = options
+    .map((option) => ({ ...option, values: splitVariantValues(option.values) }))
+    .filter((option) => option.name.trim() && option.values.length);
+
+  if (!activeOptions.length) return [];
+
+  const combinations = activeOptions.reduce(
+    (rows, option) => rows.flatMap((row) => option.values.map((value) => ({ ...row, [option.name.trim()]: value }))),
+    [{}],
+  );
+
+  return combinations.map((attributes, index) => ({
+    id: `variant-${index + 1}`,
+    attributes,
+    price: Number(basePrice) || 0,
+    stock: Number(baseStock) || 0,
+    sku: Object.values(attributes).join('-').toUpperCase().replace(/[^A-Z0-9]+/g, '-'),
+  }));
+};
+
+const readResizedImage = (file, maxSize = 900, quality = 0.82) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    image.onerror = reject;
+    image.src = reader.result;
+  };
+  reader.onerror = reject;
+  reader.readAsDataURL(file);
+});
 
 const SellerDashboard = () => {
   const { user, sellerProducts, addSellerProduct, removeSellerProduct, orders } = useApp();
@@ -71,7 +171,12 @@ const SellerDashboard = () => {
   const myProducts = sellerProducts.filter(p => String(p.sellerId) === String(user.id));
   const myOrderItems = orders.flatMap(o => o.items.filter(it => String(it.sellerId) === String(user.id)).map(it => ({ ...it, orderId: o.id })));
 
-  const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const setField = (field, value) => setForm((current) => {
+    if (field === 'category') return { ...current, category: value, subcategory: '', specs: {}, variantOptions: [], variants: [] };
+    if (field === 'subcategory') return { ...current, subcategory: value, specs: {} };
+    return { ...current, [field]: value };
+  });
+  const patchForm = (patch) => setForm((current) => ({ ...current, ...patch }));
   const toggleMenu = (label) => setOpenMenus((current) => ({ ...current, [label]: !current[label] }));
   const handleMenuChild = (child) => {
     if (child === 'Manage Products') {
@@ -99,6 +204,23 @@ const SellerDashboard = () => {
       toast({ title: 'Misleading discount', description: 'Original price must be greater than or equal to selling price.' });
       return;
     }
+    if (!form.images.length) {
+      toast({ title: 'Product image required', description: 'Upload at least one product image before submitting.' });
+      return;
+    }
+    if (!form.subcategory) {
+      toast({ title: 'Sub-category required', description: 'Choose a sub-category before submitting.' });
+      return;
+    }
+
+    const specGroups = Object.entries(form.specs)
+      .filter(([, value]) => String(value || '').trim())
+      .map(([label, value]) => ({ label, values: [String(value).trim()] }));
+    const variants = form.variants.length ? form.variants : buildVariantRows(form.variantOptions, form.price, form.stock);
+    if (variants.some((variant) => Number(variant.price) <= 0 || Number(variant.stock) < 0)) {
+      toast({ title: 'Invalid variant price/stock', description: 'Each generated variant must have a valid price and stock.' });
+      return;
+    }
 
     await addSellerProduct({
       name: form.name,
@@ -107,10 +229,22 @@ const SellerDashboard = () => {
       stock: Number(form.stock),
       brand: form.brand,
       category: form.category,
-      image: form.image,
-      images: [form.image],
+      subcategory: form.subcategory,
+      image: form.images[0],
+      images: form.images,
+      promotionImage: form.promotionImage || null,
+      videoName: form.videoName || null,
+      videoType: form.videoType || null,
+      variants,
+      specGroups,
       description: form.description,
       discount: form.originalPrice ? Math.round((1 - form.price / form.originalPrice) * 100) : 0,
+      specs: {
+        ...form.specs,
+        subcategory: form.subcategory,
+        promotionImage: Boolean(form.promotionImage),
+        videoName: form.videoName || '',
+      },
     });
 
     toast({ title: 'Product listed!', description: 'Your product is now live on Lazada.' });
@@ -189,7 +323,7 @@ const SellerDashboard = () => {
         </header>
 
         {isAddProductPage ? (
-          <AddProductPage form={form} setField={setField} handleAdd={handleAdd} />
+          <AddProductPage form={form} setField={setField} patchForm={patchForm} handleAdd={handleAdd} />
         ) : (
           <ManageProductsPage
             user={user}
@@ -271,61 +405,210 @@ const ManageProductsPage = ({ user, myProducts, myOrderItems, removeSellerProduc
   </>
 );
 
-const AddProductPage = ({ form, setField, handleAdd }) => (
-  <form onSubmit={handleAdd} className="seller-add-product-layout">
-    <div className="seller-add-product-main">
-      <section className="seller-add-section">
-        <h2>Basic Information</h2>
-        <label><span>* Product Images</span></label>
-        <div className="seller-add-image-row">
-          <img src="/try_our_app/icon3.png" alt="Product upload QR helper" />
-          <button type="button"><Plus className="h-8 w-8" /></button>
-        </div>
-        <label><span>Buyer Promotion Image</span></label>
-        <div className="seller-add-promo-row">
-          <button type="button"><Plus className="h-8 w-8" /></button>
-          <p>White Background Image<br /><a href="#example">See Example</a></p>
-        </div>
-        <label><span>Video</span></label>
-        <div className="seller-add-radio-row">
-          <label><input type="radio" checked readOnly /> Upload Video</label>
-          <label><input type="radio" readOnly /> Media Center</label>
-        </div>
-        <label><span>* Product Name</span></label>
-        <input required value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Product name" />
-        <label><span>* Category</span></label>
-        <select value={form.category} onChange={e => setField('category', e.target.value)}>
-          {VISIBLE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </section>
+const AddProductPage = ({ form, setField, patchForm, handleAdd }) => {
+  const selectedCategory = VISIBLE_CATEGORIES.find((category) => category.id === form.category) || VISIBLE_CATEGORIES[0];
+  const specFields = getSpecFields(form.category, form.subcategory);
+
+  const handleProductImages = async (event) => {
+    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/')).slice(0, 8);
+    if (!files.length) return;
+    const images = await Promise.all(files.map((file) => readResizedImage(file)));
+    setField('images', [...form.images, ...images].slice(0, 8));
+    event.target.value = '';
+  };
+
+  const handlePromotionImage = async (event) => {
+    const [file] = Array.from(event.target.files || []).filter((item) => item.type.startsWith('image/'));
+    if (!file) return;
+    const image = await readResizedImage(file, 900, 0.8);
+    setField('promotionImage', image);
+    setField('promotionImageName', file.name);
+    event.target.value = '';
+  };
+
+  const handleVideo = (event) => {
+    const [file] = Array.from(event.target.files || []).filter((item) => item.type.startsWith('video/'));
+    if (!file) return;
+    setField('videoName', file.name);
+    setField('videoType', file.type);
+    event.target.value = '';
+  };
+
+  const removeProductImage = (indexToRemove) => {
+    setField('images', form.images.filter((_, index) => index !== indexToRemove));
+  };
+
+  const setSpec = (label, value) => {
+    setField('specs', { ...form.specs, [label]: value });
+  };
+
+  const addVariantOption = () => {
+    if (form.variantOptions.length >= 2) return;
+    setField('variantOptions', [
+      ...form.variantOptions,
+      { name: getVariantOptionLabel(form.category, form.variantOptions.length), values: '' },
+    ]);
+  };
+
+  const updateVariantOption = (indexToUpdate, field, value) => {
+    patchForm({
+      variantOptions: form.variantOptions.map((option, index) => (
+        index === indexToUpdate ? { ...option, [field]: value } : option
+      )),
+      variants: [],
+    });
+  };
+
+  const removeVariantOption = (indexToRemove) => {
+    patchForm({
+      variantOptions: form.variantOptions.filter((_, index) => index !== indexToRemove),
+      variants: [],
+    });
+  };
+
+  const generateVariants = () => {
+    patchForm({ variants: buildVariantRows(form.variantOptions, form.price, form.stock) });
+  };
+
+  const updateVariant = (variantId, field, value) => {
+    setField('variants', form.variants.map((variant) => (
+      variant.id === variantId ? { ...variant, [field]: field === 'sku' ? value : Number(value) } : variant
+    )));
+  };
+
+  return (
+    <form onSubmit={handleAdd} className="seller-add-product-layout">
+      <div className="seller-add-product-main">
+        <section className="seller-add-section">
+          <h2>Basic Information</h2>
+          <label><span>* Product Images</span></label>
+          <div className="seller-add-image-row">
+            {form.images.map((image, index) => (
+              <div className="seller-add-image-preview" key={image}>
+                <img src={image} alt={`Product upload ${index + 1}`} />
+                <button type="button" aria-label="Remove product image" onClick={() => removeProductImage(index)}><Trash2 className="h-4 w-4" /></button>
+              </div>
+            ))}
+            <label className="seller-add-upload-tile">
+              <ImagePlus className="h-7 w-7" />
+              <input type="file" accept="image/*" multiple onChange={handleProductImages} />
+            </label>
+          </div>
+
+          <label><span>Buyer Promotion Image</span></label>
+          <div className="seller-add-promo-row">
+            {form.promotionImage ? (
+              <div className="seller-add-promo-preview">
+                <img src={form.promotionImage} alt="Buyer promotion" />
+                <button type="button" onClick={() => {
+                  setField('promotionImage', '');
+                  setField('promotionImageName', '');
+                }}>Remove</button>
+              </div>
+            ) : (
+              <label className="seller-add-upload-tile">
+                <Plus className="h-8 w-8" />
+                <input type="file" accept="image/*" onChange={handlePromotionImage} />
+              </label>
+            )}
+            <p>Optional white background image<br />{form.promotionImageName || 'No promotion image selected'}</p>
+          </div>
+
+          <label><span>Video</span></label>
+          <div className="seller-add-video-row">
+            <label className="seller-add-video-upload">
+              <Plus className="h-4 w-4" />
+              Upload Video
+              <input type="file" accept="video/*" onChange={handleVideo} />
+            </label>
+            {form.videoName ? (
+              <span>{form.videoName}<button type="button" onClick={() => {
+                setField('videoName', '');
+                setField('videoType', '');
+              }}>Remove</button></span>
+            ) : <small>Optional</small>}
+          </div>
+
+          <label><span>* Product Name</span></label>
+          <input required value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Product name" />
+          <label><span>* Category</span></label>
+          <select value={form.category} onChange={e => setField('category', e.target.value)}>
+            {VISIBLE_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <label><span>* Sub-category</span></label>
+          <select required value={form.subcategory} onChange={e => setField('subcategory', e.target.value)}>
+            <option value="">Select sub-category</option>
+            {selectedCategory?.subcategories?.map((subcategory) => (
+              <option key={subcategory} value={subcategory}>{subcategory}</option>
+            ))}
+          </select>
+        </section>
 
       <section className="seller-add-section">
-        <header><h2>Product Specification</h2><button type="button">Re-Generate</button></header>
+        <header><h2>Product Specification</h2><button type="button" onClick={() => setField('specs', {})}>Re-Generate</button></header>
         <div className="seller-add-two-col">
           <label><span>Brand <b>KEY</b></span><input required value={form.brand} onChange={e => setField('brand', e.target.value)} placeholder="Type to search brand.." /></label>
-          <label><span>* ISBN/ISSN</span><input placeholder="Input here" /></label>
-          <label><span>Language <b>KEY</b></span><input placeholder="Please Input or select option" /></label>
-          <label><span>Book Format <b>KEY</b></span><input placeholder="Please Input or select option" /></label>
+          {specFields.map((field) => (
+            <label key={field}>
+              <span>{field}</span>
+              <input value={form.specs[field] || ''} onChange={e => setSpec(field, e.target.value)} placeholder={`Input ${field.toLowerCase()}`} />
+            </label>
+          ))}
         </div>
-        <button type="button" className="seller-add-link">Show More <ChevronDown className="h-4 w-4" /></button>
       </section>
 
       <section className="seller-add-section">
         <h2>Price, Stock & Variants</h2>
         <p>You can add variants to a product that has more than one option, such as size or color.</p>
-        <button type="button" className="seller-add-outline"><Plus className="h-4 w-4" /> Add Variation(0/2)</button>
+        <button type="button" className="seller-add-outline" onClick={addVariantOption} disabled={form.variantOptions.length >= 2}><Plus className="h-4 w-4" /> Add Variation({form.variantOptions.length}/2)</button>
+        {form.variantOptions.length > 0 && (
+          <div className="seller-add-variant-options">
+            {form.variantOptions.map((option, index) => (
+              <div key={`${option.name}-${index}`}>
+                <label>
+                  <span>Option Name</span>
+                  <input value={option.name} onChange={e => updateVariantOption(index, 'name', e.target.value)} placeholder="Color Family" />
+                </label>
+                <label>
+                  <span>Option Values</span>
+                  <input value={option.values} onChange={e => updateVariantOption(index, 'values', e.target.value)} placeholder="Black, White, Blue" />
+                </label>
+                <button type="button" onClick={() => removeVariantOption(index)}>Remove</button>
+              </div>
+            ))}
+            <button type="button" className="seller-add-link" onClick={generateVariants}>Generate Variant Rows</button>
+          </div>
+        )}
         <div className="seller-add-stock-grid">
           <label><span>* Price</span><input required type="number" min="1" value={form.price} onChange={e => setField('price', e.target.value)} placeholder="₱" /></label>
           <label><span>Special Price</span><input type="number" min="0" value={form.originalPrice} onChange={e => setField('originalPrice', e.target.value)} placeholder="Add" /></label>
           <label><span>Stock</span><input required type="number" min="0" value={form.stock} onChange={e => setField('stock', e.target.value)} /></label>
           <label><span>SellerSKU</span><input placeholder="Seller SKU" /></label>
         </div>
+        {form.variants.length > 0 && (
+          <div className="seller-add-variant-table">
+            <table>
+              <thead>
+                <tr><th>Variant</th><th>Price</th><th>Stock</th><th>SellerSKU</th></tr>
+              </thead>
+              <tbody>
+                {form.variants.map((variant) => (
+                  <tr key={variant.id}>
+                    <td>{Object.entries(variant.attributes).map(([key, value]) => `${key}: ${value}`).join(' / ')}</td>
+                    <td><input type="number" min="1" value={variant.price} onChange={e => updateVariant(variant.id, 'price', e.target.value)} /></td>
+                    <td><input type="number" min="0" value={variant.stock} onChange={e => updateVariant(variant.id, 'stock', e.target.value)} /></td>
+                    <td><input value={variant.sku} onChange={e => updateVariant(variant.id, 'sku', e.target.value)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="seller-add-section">
         <h2>Product Description</h2>
         <label><span>Main Description</span></label>
-        <input value={form.image} onChange={e => setField('image', e.target.value)} placeholder="Image URL" />
         <textarea required value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Please input" rows={9} />
       </section>
 
@@ -363,6 +646,7 @@ const AddProductPage = ({ form, setField, handleAdd }) => (
       </section>
     </aside>
   </form>
-);
+  );
+};
 
 export default SellerDashboard;
