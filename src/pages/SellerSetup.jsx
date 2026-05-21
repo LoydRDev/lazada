@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, HelpCircle, LogOut, ShieldCheck, UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useToast } from '../hooks/use-toast';
-import { isGeneratedSellerBusiness, isGeneratedSellerPermit, isGeneratedSellerStore } from '../lib/sellerSetup';
+import { isGeneratedSellerBusiness, isGeneratedSellerPermit, isGeneratedSellerStore, isSellerSetupComplete } from '../lib/sellerSetup';
 
 const setupSteps = ['Seller Information', 'Valid ID', 'Store Review'];
 
@@ -55,6 +55,19 @@ const SellerSetup = () => {
         <p className="seller-setup-empty">Please log in before completing your seller setup.</p>
       </div>
     );
+  }
+
+  if (user.role !== 'seller') {
+    return (
+      <div className="seller-setup-page">
+        <p className="seller-setup-empty">Seller setup is only available for seller accounts.</p>
+        <button type="button" className="seller-login-submit" onClick={() => navigate('/seller/login')}>Go to Seller Login</button>
+      </div>
+    );
+  }
+
+  if (isSellerSetupComplete(user)) {
+    return <Navigate to="/seller/dashboard" replace />;
   }
 
   const submit = async (event) => {

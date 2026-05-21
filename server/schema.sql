@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   user_default_address JSON NULL,
   date_registered DATE NOT NULL DEFAULT (CURRENT_DATE),
   user_acct_stat ENUM('Active', 'Suspended', 'Banned', 'Inactive') NOT NULL DEFAULT 'Active',
-  user_role ENUM('Buyer', 'Seller', 'Admin', 'Moderator') NOT NULL DEFAULT 'Buyer',
+  user_role ENUM('Buyer', 'Seller', 'Admin', 'Moderator', 'Driver') NOT NULL DEFAULT 'Buyer',
   user_verified BOOLEAN NOT NULL DEFAULT FALSE,
   INDEX idx_users_email (user_email),
   INDEX idx_users_role (user_role)
@@ -35,8 +35,31 @@ CREATE TABLE IF NOT EXISTS categories (
   cat_slug VARCHAR(80) NOT NULL UNIQUE,
   cat_name VARCHAR(100) NOT NULL,
   cat_description TEXT NULL,
+  cat_icon VARCHAR(80) NULL,
   cat_status ENUM('Active', 'Inactive', 'Hidden') NOT NULL DEFAULT 'Active',
   CONSTRAINT fk_categories_parent FOREIGN KEY (cat_parent_category_id) REFERENCES categories (cat_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_logs (
+  log_id INT PRIMARY KEY,
+  admin_user_id INT NOT NULL,
+  action VARCHAR(80) NOT NULL,
+  detail JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_admin_logs_user FOREIGN KEY (admin_user_id) REFERENCES users (user_id),
+  INDEX idx_admin_logs_admin (admin_user_id),
+  INDEX idx_admin_logs_action (action)
+);
+
+CREATE TABLE IF NOT EXISTS product_removal_logs (
+  removal_id INT PRIMARY KEY,
+  product_id INT NOT NULL,
+  product_name VARCHAR(200) NOT NULL,
+  admin_user_id INT NOT NULL,
+  reason TEXT NULL,
+  removed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_product_removal_logs_admin (admin_user_id),
+  INDEX idx_product_removal_logs_product (product_id)
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -70,6 +93,50 @@ CREATE TABLE IF NOT EXISTS products (
   INDEX idx_products_status (prod_status)
 );
 
+CREATE TABLE IF NOT EXISTS product_images (
+  image_id INT PRIMARY KEY,
+  product_id INT NOT NULL,
+  image_url TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_product_images_product FOREIGN KEY (product_id) REFERENCES products (prod_id) ON DELETE CASCADE,
+  INDEX idx_product_images_product (product_id)
+);
+
+CREATE TABLE IF NOT EXISTS product_variant_groups (
+  group_id INT PRIMARY KEY,
+  product_id INT NOT NULL,
+  name VARCHAR(80) NOT NULL,
+  CONSTRAINT fk_variant_groups_product FOREIGN KEY (product_id) REFERENCES products (prod_id) ON DELETE CASCADE,
+  INDEX idx_variant_groups_product (product_id)
+);
+
+CREATE TABLE IF NOT EXISTS product_variant_options (
+  option_id INT PRIMARY KEY,
+  group_id INT NOT NULL,
+  value VARCHAR(120) NOT NULL,
+  CONSTRAINT fk_variant_options_group FOREIGN KEY (group_id) REFERENCES product_variant_groups (group_id) ON DELETE CASCADE,
+  INDEX idx_variant_options_group (group_id)
+);
+
+CREATE TABLE IF NOT EXISTS product_variants (
+  variant_id INT PRIMARY KEY,
+  product_id INT NOT NULL,
+  sku VARCHAR(80) NOT NULL,
+  variant_name VARCHAR(255) NOT NULL,
+  price DECIMAL(10, 2) NOT NULL,
+  stock INT NOT NULL DEFAULT 0,
+  image_url TEXT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  selected_options JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_product_variants_product FOREIGN KEY (product_id) REFERENCES products (prod_id) ON DELETE CASCADE,
+  UNIQUE KEY uniq_product_variant_sku (product_id, sku),
+  INDEX idx_product_variants_product (product_id),
+  INDEX idx_product_variants_status (status)
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   order_id INT PRIMARY KEY,
   order_user_id INT NOT NULL,
@@ -79,7 +146,7 @@ CREATE TABLE IF NOT EXISTS orders (
   order_discount_amt DECIMAL(10, 2) NULL DEFAULT 0.00,
   order_final_amt DECIMAL(10, 2) NOT NULL,
   order_payment_status ENUM('Pending', 'Paid', 'Failed', 'Refunded') NOT NULL DEFAULT 'Pending',
-  order_status ENUM('Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Returned') NOT NULL DEFAULT 'Pending',
+  order_status VARCHAR(40) NOT NULL DEFAULT 'pending_approval',
   order_cancel_reason TEXT NULL,
   order_status_update DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   order_delivery_address JSON NOT NULL,
@@ -94,13 +161,65 @@ CREATE TABLE IF NOT EXISTS order_items (
   oitem_id INT PRIMARY KEY,
   oitem_order_id INT NOT NULL,
   oitem_prod_id INT NOT NULL,
+  oitem_sell_id INT NOT NULL,
+  oitem_buyer_id INT NOT NULL,
   oitem_quantity INT NOT NULL,
   oitem_unit_price DECIMAL(10, 2) NOT NULL,
   oitem_subtotal DECIMAL(10, 2) NOT NULL,
-  oitem_item_status ENUM('Pending', 'Processing', 'Shipped', 'Delivered', 'Returned') NOT NULL DEFAULT 'Pending',
+  oitem_variant_id INT NULL,
+  oitem_variant_name VARCHAR(255) NULL,
+  oitem_selected_options JSON NULL,
+  oitem_driver_id INT NULL,
+  oitem_driver_name VARCHAR(100) NULL,
+  oitem_driver_phone VARCHAR(30) NULL,
+  oitem_driver_vehicle VARCHAR(60) NULL,
+  oitem_tracking_number VARCHAR(80) NULL,
+  oitem_delivery_status VARCHAR(40) NULL,
+  oitem_item_status VARCHAR(40) NOT NULL DEFAULT 'pending_approval',
+  oitem_created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  oitem_updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_order_items_order FOREIGN KEY (oitem_order_id) REFERENCES orders (order_id) ON DELETE CASCADE,
   CONSTRAINT fk_order_items_product FOREIGN KEY (oitem_prod_id) REFERENCES products (prod_id),
-  INDEX idx_order_items_order (oitem_order_id)
+  CONSTRAINT fk_order_items_seller FOREIGN KEY (oitem_sell_id) REFERENCES sellers (sell_id),
+  CONSTRAINT fk_order_items_buyer FOREIGN KEY (oitem_buyer_id) REFERENCES users (user_id),
+  INDEX idx_order_items_order (oitem_order_id),
+  INDEX idx_order_items_seller (oitem_sell_id),
+  INDEX idx_order_items_buyer (oitem_buyer_id),
+  INDEX idx_order_items_status (oitem_item_status)
+);
+
+CREATE TABLE IF NOT EXISTS product_reviews (
+  review_id INT PRIMARY KEY,
+  order_id INT NOT NULL,
+  order_item_id INT NOT NULL,
+  product_id INT NOT NULL,
+  buyer_id INT NOT NULL,
+  rating TINYINT NOT NULL,
+  comment TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_product_reviews_order_item (order_item_id),
+  CONSTRAINT fk_product_reviews_order FOREIGN KEY (order_id) REFERENCES orders (order_id) ON DELETE CASCADE,
+  CONSTRAINT fk_product_reviews_order_item FOREIGN KEY (order_item_id) REFERENCES order_items (oitem_id) ON DELETE CASCADE,
+  CONSTRAINT fk_product_reviews_product FOREIGN KEY (product_id) REFERENCES products (prod_id),
+  CONSTRAINT fk_product_reviews_buyer FOREIGN KEY (buyer_id) REFERENCES users (user_id),
+  INDEX idx_product_reviews_product (product_id),
+  INDEX idx_product_reviews_buyer (buyer_id)
+);
+
+CREATE TABLE IF NOT EXISTS order_status_history (
+  history_id INT PRIMARY KEY,
+  order_id INT NOT NULL,
+  order_item_id INT NOT NULL,
+  previous_status VARCHAR(40) NULL,
+  next_status VARCHAR(40) NOT NULL,
+  changed_by_id INT NOT NULL,
+  changed_by_role VARCHAR(20) NOT NULL,
+  note TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_status_history_order FOREIGN KEY (order_id) REFERENCES orders (order_id) ON DELETE CASCADE,
+  CONSTRAINT fk_status_history_item FOREIGN KEY (order_item_id) REFERENCES order_items (oitem_id) ON DELETE CASCADE,
+  INDEX idx_order_status_history_order (order_id),
+  INDEX idx_order_status_history_item (order_item_id)
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -200,6 +319,10 @@ CREATE TABLE IF NOT EXISTS cart_items (
   citem_id INT PRIMARY KEY,
   citem_cart_id INT NOT NULL,
   citem_prod_id INT NOT NULL,
+  citem_variant_id INT NULL,
+  citem_variant_name VARCHAR(255) NULL,
+  citem_selected_options JSON NULL,
+  citem_price_at_purchase DECIMAL(10, 2) NULL,
   citem_qty INT NOT NULL,
   citem_date_added DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   citem_is_selected BOOLEAN NOT NULL DEFAULT TRUE,

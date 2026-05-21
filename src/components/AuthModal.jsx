@@ -383,7 +383,7 @@ const AuthModal = ({ mode }) => {
 
     const email = `${provider.toLowerCase()}_buyer@lazada.local`;
     const password = `${provider.toLowerCase()}_social_login`;
-    let result = await login(email, password);
+    let result = await login(email, password, { allowedRoles: ['buyer'] });
 
     if (!result.ok) {
       result = await register({
@@ -438,7 +438,7 @@ const AuthModal = ({ mode }) => {
         setIsSubmitting(true);
         await authDelay();
 
-        const result = await login(phoneEmail(), 'phone_otp_login');
+        const result = await login(phoneEmail(), 'phone_otp_login', { allowedRoles: ['buyer'] });
         if (!result.ok) {
           toast({ title: 'Phone not registered', description: 'Please sign up with this phone number first.' });
           setIsSubmitting(false);
@@ -455,17 +455,15 @@ const AuthModal = ({ mode }) => {
       setIsSubmitting(true);
       await authDelay();
 
-      const result = await login(form.identifier.trim(), form.password);
+      const result = await login(form.identifier.trim(), form.password, { allowedRoles: ['buyer'] });
       if (!result.ok) {
         toast({ title: 'Login failed', description: result.msg });
         setIsSubmitting(false);
         return;
       }
 
-      toast({ title: `Welcome back, ${result.user.name}!`, description: `Logged in as ${result.user.role}` });
-      if (result.user.role === 'admin') navigate('/admin');
-      else if (result.user.role === 'seller') navigate('/seller/dashboard');
-      else navigate('/');
+      toast({ title: `Welcome back, ${result.user.name}!`, description: 'Logged in as buyer' });
+      navigate('/');
       return;
     }
 

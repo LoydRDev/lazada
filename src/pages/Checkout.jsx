@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, CreditCard, Wallet, Truck, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { peso_fmt } from '../components/ProductCard';
 import { useToast } from '../hooks/use-toast';
 
 const Checkout = () => {
-  const { cart, user, placeOrder, clearCart, clearCartItems } = useApp();
+  const { cart, buyerUser, placeOrder, clearCart, clearCartItems } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { state } = useLocation();
-  const [address, setAddress] = useState({ name: user?.name || '', phone: '', street: '', city: '', province: 'Metro Manila', zip: '' });
+  const [address, setAddress] = useState({ name: buyerUser?.name || '', phone: '', street: '', city: '', province: 'Metro Manila', zip: '' });
   const [payment, setPayment] = useState('cod');
   const selectedCartIds = state?.selectedCartIds?.map((id) => String(id));
   const checkoutItems = selectedCartIds?.length
@@ -21,9 +21,26 @@ const Checkout = () => {
   const shipping = subtotal > 499 ? 0 : 50;
   const total = subtotal + shipping;
 
+  if (!buyerUser) {
+    return (
+      <div className="max-w-[1400px] mx-auto px-4 py-10">
+        <div className="bg-white rounded-lg p-16 text-center">
+          <h1 className="text-xl font-semibold text-gray-700 mb-2">Buyer login required</h1>
+          <p className="text-gray-500 mb-5">Please log in with a buyer account before checking out.</p>
+          <Link to="/login" className="inline-block bg-orange-500 text-white px-6 py-2.5 rounded hover:bg-orange-600">Login as Buyer</Link>
+        </div>
+      </div>
+    );
+  }
+
   const submit = async (e) => {
     e.preventDefault();
     if (checkoutItems.length === 0) { toast({ title: 'Cart is empty' }); return; }
+    const insufficient = checkoutItems.find((item) => Number(item.stock ?? 999999) < Number(item.qty));
+    if (insufficient) {
+      toast({ title: 'Stock changed', description: `${insufficient.name} only has ${insufficient.stock} available.` });
+      return;
+    }
     const r = await placeOrder(checkoutItems, address, payment);
     if (r.ok) {
       if (selectedCartIds?.length) clearCartItems(selectedCartIds);
@@ -58,7 +75,15 @@ const Checkout = () => {
               {checkoutItems.map(item => (
                 <div key={item.id} className="py-3 flex items-center gap-3">
                   <img src={item.image} alt={item.name} className="w-14 h-14 object-cover rounded" />
-                  <div className="flex-1 text-sm text-gray-800 line-clamp-2">{item.name}</div>
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-800 line-clamp-2">{item.name}</div>
+                    {(item.variantName || item.sku) && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {item.variantName ? `Variation: ${item.variantName}` : null}
+                        {item.sku ? `${item.variantName ? ' | ' : ''}SKU: ${item.sku}` : null}
+                      </p>
+                    )}
+                  </div>
                   <div className="text-sm text-gray-500">x{item.qty}</div>
                   <div className="text-sm font-semibold text-orange-600 w-24 text-right">{peso_fmt(item.price * item.qty)}</div>
                 </div>

@@ -9,12 +9,13 @@ const Category = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const q = searchParams.get('q');
-  const { isCatalogLoading, sellerProducts } = useApp();
+  const { isCatalogLoading, sellerProducts, categories } = useApp();
   const [sortBy, setSortBy] = useState('popular');
   const [minRating, setMinRating] = useState(0);
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
 
-  const cat = CATEGORIES.find(c => c.id === id);
+  const activeCategories = (categories.length ? categories : VISIBLE_CATEGORIES).filter(c => (c.status || 'Active') === 'Active' && !c.hidden);
+  const cat = activeCategories.find(c => c.id === id || c.slug === id) || CATEGORIES.find(c => c.id === id);
 
   const filtered = useMemo(() => {
     let list = sellerProducts;
@@ -46,8 +47,8 @@ const Category = () => {
           <div className="mb-4">
             <div className="text-sm font-semibold text-gray-700 mb-2">Categories</div>
             <div className="space-y-1.5 text-sm">
-              {VISIBLE_CATEGORIES.map(c => (
-                <Link key={c.id} to={`/category/${c.id}`} className={`block hover:text-orange-600 ${id === c.id ? 'text-orange-600 font-semibold' : 'text-gray-600'}`}>{c.name}</Link>
+              {activeCategories.map(c => (
+                <Link key={c.id || c.slug} to={`/category/${c.slug || c.id}`} className={`block hover:text-orange-600 ${id === (c.slug || c.id) ? 'text-orange-600 font-semibold' : 'text-gray-600'}`}>{c.name}</Link>
               ))}
             </div>
           </div>

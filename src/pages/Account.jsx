@@ -29,8 +29,9 @@ const hashToSection = (hash) => {
 };
 
 const Account = () => {
-  const { user, sellerProducts } = useApp();
+  const { buyerUser, sellerProducts } = useApp();
   const navigate = useNavigate();
+  const user = buyerUser;
   const [section, setSection] = useState(() => hashToSection(window.location.hash));
   const [reviewTab, setReviewTab] = useState('pending');
   const [addressLabel, setAddressLabel] = useState('home');

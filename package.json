@@ -9,6 +9,7 @@
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
     "lint": "eslint .",
+    "test:workflow": "node tests/workflow-smoke.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

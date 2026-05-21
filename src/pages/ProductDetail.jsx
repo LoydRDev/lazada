@@ -44,6 +44,12 @@ const getPhoneColorOptions = (product) => {
 };
 
 const getProductSpecGroups = (product) => {
+  if (Array.isArray(product.variantGroups) && product.variantGroups.length) {
+    return product.variantGroups.map((group) => ({
+      label: group.label || group.name,
+      values: group.values || group.options || [],
+    })).filter((group) => group.label && group.values.length);
+  }
   if (Array.isArray(product.specGroups) && product.specGroups.length) return product.specGroups;
   if (Array.isArray(product.variants) && product.variants.length) {
     const labels = Object.keys(product.variants[0].attributes || {});
@@ -164,8 +170,8 @@ const getProductTrail = (product) => {
 const getSpecificationRows = (product, specGroups, seller, categoryLabel) => {
   const text = textFor(product);
   const sellerSpecs = Object.entries(product.specs || {})
-    .filter(([key, value]) => !['promotionImage', 'videoName', 'variants', 'specGroups'].includes(key) && value)
-    .map(([key, value]) => [key, String(value)]);
+    .filter(([key, value]) => !['promotionImage', 'videoName', 'variants', 'specGroups', 'variantGroups', 'hasVariants'].includes(key) && value)
+    .map(([key, value]) => [key, typeof value === 'object' ? Object.values(value).filter(Boolean).join(' x ') : String(value)]);
   const rows = [
     ['Brand', product.brand || 'Generic'],
     ['Category', categoryLabel],
@@ -232,7 +238,7 @@ const getReviewSummary = (product) => {
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getProductById, addToCart, sellerProducts, user, isCatalogLoading } = useApp();
+  const { getProductById, addToCart, sellerProducts, buyerUser, isCatalogLoading } = useApp();
   const { toast } = useToast();
   const product = getProductById(id) || PRODUCTS.find((item) => String(item.id) === String(id));
   const [activeImg, setActiveImg] = useState(0);
@@ -280,6 +286,10 @@ const ProductDetail = () => {
     products: sellerProducts.length || 50,
   };
   const images = product.images?.length ? product.images : [product.image];
+  const activeVariants = Array.isArray(product.variants)
+    ? product.variants.filter((variant) => String(variant.status || 'active').toLowerCase() === 'active')
+    : [];
+  const hasSelectableVariants = Boolean(product.hasVariants || activeVariants.length);
   const specGroups = getProductSpecGroups(product);
   const breadcrumbTrail = getProductTrail(product);
   const categoryLabel = breadcrumbTrail[0]?.label || product.category;
@@ -300,23 +310,41 @@ const ProductDetail = () => {
   const receiveDate = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric' }).format(
     estimatedDeliveryDate,
   );
-  const selectedVariant = Array.isArray(product.variants) && product.variants.length
-    ? product.variants.find((variant) => Object.entries(variant.attributes || {}).every(([label, value]) => {
-        const group = specGroups.find((item) => item.label === label);
-        const selectedValue = selectedSpecs[label] || group?.values?.[0];
-        return selectedValue === value;
-      })) || product.variants[0]
+  const selectedVariant = hasSelectableVariants
+    ? activeVariants.find((variant) => specGroups.every((group) => selectedSpecs[group.label] && variant.attributes?.[group.label] === selectedSpecs[group.label])) || null
     : null;
   const activePrice = Number(selectedVariant?.price || product.price);
-  const activeStock = Number(selectedVariant?.stock ?? product.stock);
+  const activeStock = Number(hasSelectableVariants ? selectedVariant?.stock || 0 : product.stock);
+  const displayImage = selectedVariant?.image || images[Math.min(activeImg, images.length - 1)];
+  const selectedVariantName = selectedVariant?.variantName || Object.values(selectedVariant?.attributes || {}).join(' / ');
 
-  const requireBuyer = () => {
-    if (!user) {
-      navigate('/login');
+  const canCompleteVariantWith = (label, value) => {
+    if (!hasSelectableVariants) return true;
+    const nextSelection = { ...selectedSpecs, [label]: value };
+    return activeVariants.some((variant) => (
+      specGroups.every((group) => !nextSelection[group.label] || variant.attributes?.[group.label] === nextSelection[group.label])
+    ));
+  };
+
+  const validatePurchaseSelection = () => {
+    if (hasSelectableVariants && !selectedVariant) {
+      toast({ title: 'Select a variation', description: 'Please select a valid active variant before adding this product.' });
       return false;
     }
-    if (user.role !== 'buyer' && user.role !== 'admin') {
-      toast({ title: 'Only buyers can purchase', description: 'Seller accounts cannot buy products.' });
+    if (activeStock <= 0) {
+      toast({ title: 'Out of stock', description: 'This selected option is currently unavailable.' });
+      return false;
+    }
+    if (qty > activeStock) {
+      toast({ title: 'Quantity unavailable', description: `Only ${activeStock} item(s) are available for this selection.` });
+      return false;
+    }
+    return true;
+  };
+
+  const requireBuyer = () => {
+    if (!buyerUser) {
+      navigate('/login');
       return false;
     }
     return true;
@@ -324,11 +352,18 @@ const ProductDetail = () => {
 
   const handleAdd = () => {
     if (!requireBuyer()) return;
+    if (!validatePurchaseSelection()) return;
     launchCartFlyAnimation();
     addToCart({
-      ...product,
-      id: selectedVariant ? `${product.id}-${selectedVariant.sku}` : product.id,
-      name: selectedVariant ? `${product.name} (${Object.values(selectedVariant.attributes || {}).join(' / ')})` : product.name,
+      id: product.id,
+      productId: product.id,
+      variantId: selectedVariant?.variantId || null,
+      variantName: selectedVariantName || null,
+      selectedOptions: selectedVariant?.selectedOptions || selectedVariant?.attributes || {},
+      sku: selectedVariant?.sku || product.sku || null,
+      name: product.name,
+      image: displayImage,
+      sellerId: product.sellerId,
       price: activePrice,
       stock: activeStock,
     }, qty);
@@ -347,7 +382,7 @@ const ProductDetail = () => {
     const flyer = document.createElement('img');
     const startSize = Math.min(96, Math.max(56, sourceRect.width * 0.22));
 
-    flyer.src = images[Math.min(activeImg, images.length - 1)];
+    flyer.src = displayImage;
     flyer.alt = '';
     flyer.className = 'cart-flyer';
     flyer.style.width = `${startSize}px`;
@@ -375,10 +410,17 @@ const ProductDetail = () => {
 
   const handleBuy = () => {
     if (!requireBuyer()) return;
+    if (!validatePurchaseSelection()) return;
     addToCart({
-      ...product,
-      id: selectedVariant ? `${product.id}-${selectedVariant.sku}` : product.id,
-      name: selectedVariant ? `${product.name} (${Object.values(selectedVariant.attributes || {}).join(' / ')})` : product.name,
+      id: product.id,
+      productId: product.id,
+      variantId: selectedVariant?.variantId || null,
+      variantName: selectedVariantName || null,
+      selectedOptions: selectedVariant?.selectedOptions || selectedVariant?.attributes || {},
+      sku: selectedVariant?.sku || product.sku || null,
+      name: product.name,
+      image: displayImage,
+      sellerId: product.sellerId,
       price: activePrice,
       stock: activeStock,
     }, qty);
@@ -400,7 +442,7 @@ const ProductDetail = () => {
       <section className="product-main-card">
         <div className="product-gallery">
           <div className="product-main-image">
-            <img ref={imageRef} src={images[Math.min(activeImg, images.length - 1)]} alt={product.name} />
+            <img ref={imageRef} src={displayImage} alt={product.name} />
           </div>
           <div className="product-thumbs">
             {images.map((img, index) => (
@@ -445,6 +487,13 @@ const ProductDetail = () => {
             {product.originalPrice > activePrice && <s>{peso_fmt(product.originalPrice)}</s>}
             {product.discount > 0 && <span>-{product.discount}%</span>}
           </div>
+          <p className="text-sm text-gray-500 mt-2">
+            {hasSelectableVariants
+              ? selectedVariant
+                ? `SKU: ${selectedVariant.sku} | Stock: ${activeStock}`
+                : 'Select all variation options to see SKU and stock'
+              : `Stock: ${activeStock}`}
+          </p>
 
           <div className="product-option-grid">
             <span>Promotions:</span>
@@ -469,25 +518,29 @@ const ProductDetail = () => {
             {specGroups.map((group) => {
               const selectedValue = group.values.includes(selectedSpecs[group.label])
                 ? selectedSpecs[group.label]
-                : group.values[0];
+                : hasSelectableVariants ? '' : group.values[0];
 
               return (
                 <Fragment key={group.label}>
                   <span className="product-spec-label">
                     {group.label}:<br />
-                    <b>{selectedValue}</b>
+                    <b>{selectedValue || 'Select'}</b>
                   </span>
                   <div className="product-variants">
-                    {group.values.map((value) => (
-                      <button
-                        type="button"
-                        key={value}
-                        className={selectedValue === value ? 'active' : ''}
-                        onClick={() => setSelectedSpecs((current) => ({ ...current, [group.label]: value }))}
-                      >
-                        {value}
-                      </button>
-                    ))}
+                    {group.values.map((value) => {
+                      const isAvailable = canCompleteVariantWith(group.label, value);
+                      return (
+                        <button
+                          type="button"
+                          key={value}
+                          className={selectedValue === value ? 'active' : ''}
+                          disabled={hasSelectableVariants && !isAvailable}
+                          onClick={() => setSelectedSpecs((current) => ({ ...current, [group.label]: value }))}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
                   </div>
                 </Fragment>
               );
@@ -497,7 +550,7 @@ const ProductDetail = () => {
             <div className="product-qty">
               <button type="button" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></button>
               <b>{qty}</b>
-              <button type="button" onClick={() => setQty(Math.min(activeStock || 99, qty + 1))}><Plus className="h-4 w-4" /></button>
+              <button type="button" onClick={() => setQty(Math.min(activeStock || 1, qty + 1))}><Plus className="h-4 w-4" /></button>
             </div>
           </div>
 

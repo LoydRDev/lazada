@@ -12,12 +12,15 @@ import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
+import OrderDetail from './pages/OrderDetail';
 import Account from './pages/Account';
 import Seller from './pages/Seller';
 import SellerLogin from './pages/SellerLogin';
 import SellerSetup from './pages/SellerSetup';
 import SellerDashboard from './pages/SellerDashboard';
 import AdminPanel from './pages/AdminPanel';
+import DriverLogin from './pages/DriverLogin';
+import DriverDashboard from './pages/DriverDashboard';
 import { AppProvider } from './context/AppContext';
 import { Toaster } from './components/ui/toaster';
 
@@ -32,7 +35,8 @@ const Layout = ({ children }) => {
   const authMode = pathname === '/login' ? 'login' : pathname === '/register' ? 'register' : null;
   const isSellerStandalone = pathname.startsWith('/seller');
   const isAdminStandalone = pathname === '/admin';
-  const hideStorefrontChrome = isSellerStandalone || isAdminStandalone;
+  const isDriverStandalone = pathname.startsWith('/driver');
+  const hideStorefrontChrome = isSellerStandalone || isAdminStandalone || isDriverStandalone;
 
   return (
     <div className="App">
@@ -65,13 +69,17 @@ function App() {
             <Route path="/register" element={<Home />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
             <Route path="/account" element={<Account />} />
             <Route path="/seller" element={<Seller />} />
             <Route path="/seller/login" element={<SellerLogin />} />
             <Route path="/seller/setup" element={<SellerSetup />} />
             <Route path="/seller/dashboard" element={<SellerDashboard />} />
             <Route path="/seller/dashboard/add-product" element={<SellerDashboard />} />
+            <Route path="/seller/dashboard/edit-product/:id" element={<SellerDashboard />} />
             <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/driver/login" element={<DriverLogin />} />
+            <Route path="/driver/dashboard" element={<DriverDashboard />} />
           </Routes>
         </Layout>
     </AppProvider>

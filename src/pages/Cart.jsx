@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import { peso_fmt } from '../components/ProductCard';
 
 const Cart = () => {
-  const { cart, updateCartQty, removeFromCart, user } = useApp();
+  const { cart, updateCartQty, removeFromCart, buyerUser } = useApp();
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState(() => cart.map((item) => String(item.id)));
   const selectedItems = useMemo(
@@ -28,7 +28,7 @@ const Cart = () => {
   };
 
   const proceedToCheckout = () => {
-    if (!user) {
+    if (!buyerUser) {
       navigate('/login');
       return;
     }
@@ -70,14 +70,29 @@ const Cart = () => {
                 />
               </label>
               <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded" />
-              <Link to={`/product/${item.id}`} className="text-sm text-gray-800 hover:text-orange-600 line-clamp-2">{item.name}</Link>
+              <div>
+                <Link to={`/product/${item.productId || item.id}`} className="text-sm text-gray-800 hover:text-orange-600 line-clamp-2">{item.name}</Link>
+                {(item.variantName || item.sku) && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {item.variantName ? `Variation: ${item.variantName}` : null}
+                    {item.sku ? `${item.variantName ? ' | ' : ''}SKU: ${item.sku}` : null}
+                  </p>
+                )}
+              </div>
               <div className="text-center text-orange-600 font-semibold">{peso_fmt(item.price)}</div>
               <div className="flex items-center justify-center">
                 <div className="flex items-center border border-gray-300 rounded">
                   <button onClick={() => updateCartQty(item.id, item.qty - 1)} className="px-2 py-1 hover:bg-gray-100"><Minus className="w-3 h-3" /></button>
                   <span className="px-3 py-1 border-x border-gray-300 min-w-[36px] text-center text-sm">{item.qty}</span>
-                  <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="px-2 py-1 hover:bg-gray-100"><Plus className="w-3 h-3" /></button>
+                  <button
+                    onClick={() => updateCartQty(item.id, item.qty + 1)}
+                    disabled={Number(item.stock ?? 999999) <= item.qty}
+                    className="px-2 py-1 hover:bg-gray-100 disabled:opacity-40"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
                 </div>
+                {Number(item.stock ?? 999999) <= item.qty && <span className="ml-2 text-[11px] text-gray-400">Max</span>}
               </div>
               <button onClick={() => removeFromCart(item.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
             </div>

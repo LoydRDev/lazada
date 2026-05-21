@@ -12,13 +12,14 @@ import {
 } from './ui/dropdown-menu';
 
 const Header = () => {
-  const { user, cart, logout } = useApp();
+  const { buyerUser, cart, logout } = useApp();
   const [q, setQ] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [cartPulse, setCartPulse] = useState(false);
   const navigate = useNavigate();
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
   const previousCartCount = useRef(cartCount);
+  const user = buyerUser;
 
   useEffect(() => {
     if (cartCount > previousCartCount.current) {

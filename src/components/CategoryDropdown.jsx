@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { VISIBLE_CATEGORIES } from '../data/catalog';
+import { useApp } from '../context/AppContext';
 
 const CategoryDropdown = () => {
-  const [activeCategoryId, setActiveCategoryId] = useState(VISIBLE_CATEGORIES[0]?.id);
+  const { categories } = useApp();
+  const visibleCategories = (categories.length ? categories : VISIBLE_CATEGORIES).filter(category => (category.status || 'Active') === 'Active' && !category.hidden);
+  const [activeCategoryId, setActiveCategoryId] = useState(visibleCategories[0]?.id);
   const [isOpen, setIsOpen] = useState(false);
-  const activeCategory = VISIBLE_CATEGORIES.find((category) => category.id === activeCategoryId) || VISIBLE_CATEGORIES[0];
+  const activeCategory = visibleCategories.find((category) => (category.id || category.slug) === activeCategoryId) || visibleCategories[0];
 
   return (
     <nav
@@ -28,13 +31,13 @@ const CategoryDropdown = () => {
 
       <div className={`lazada-category-menu ${isOpen ? 'open' : ''}`}>
         <ul>
-          {VISIBLE_CATEGORIES.map((category) => (
-            <li key={category.id}>
+          {visibleCategories.map((category) => (
+            <li key={category.id || category.slug}>
               <Link
-                to={`/category/${category.id}`}
-                className={activeCategory?.id === category.id ? 'active' : ''}
-                onMouseEnter={() => setActiveCategoryId(category.id)}
-                onFocus={() => setActiveCategoryId(category.id)}
+                to={`/category/${category.slug || category.id}`}
+                className={(activeCategory?.id || activeCategory?.slug) === (category.id || category.slug) ? 'active' : ''}
+                onMouseEnter={() => setActiveCategoryId(category.id || category.slug)}
+                onFocus={() => setActiveCategoryId(category.id || category.slug)}
               >
                 <span>{category.name}</span>
                 <ChevronRight className="h-4 w-4" />
@@ -46,7 +49,7 @@ const CategoryDropdown = () => {
           {activeCategory?.subcategories?.map((subcategory) => (
             <Link
               key={subcategory}
-              to={`/category/${activeCategory.id}?q=${encodeURIComponent(subcategory)}`}
+              to={`/category/${activeCategory.slug || activeCategory.id}?q=${encodeURIComponent(subcategory)}`}
             >
               {subcategory}
             </Link>

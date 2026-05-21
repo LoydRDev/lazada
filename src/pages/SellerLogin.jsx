@@ -19,23 +19,15 @@ const SellerLogin = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    const result = await login(form.identifier.trim(), form.password);
+    const result = await login(form.identifier.trim(), form.password, { allowedRoles: ['seller'] });
     if (!result.ok) {
       toast({ title: 'Seller login failed', description: result.msg });
       setIsSubmitting(false);
       return;
     }
 
-    if (result.user.role !== 'seller' && result.user.role !== 'admin') {
-      toast({ title: 'Seller account required', description: 'Please use a registered seller account.' });
-      setIsSubmitting(false);
-      return;
-    }
-
     toast({ title: 'Welcome to Seller Center', description: `Logged in as ${result.user.name}.` });
-    if (result.user.role === 'admin') {
-      navigate('/admin');
-    } else if (!isSellerSetupComplete(result.user)) {
+    if (!isSellerSetupComplete(result.user)) {
       navigate('/seller/setup');
     } else {
       navigate('/seller/dashboard');

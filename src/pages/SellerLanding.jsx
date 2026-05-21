@@ -64,7 +64,7 @@ const faqs = [
 ];
 
 const SellerLanding = () => {
-  const { user, register, login, updateUser } = useApp();
+  const { buyerUser, register, login, updateUser } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
@@ -94,7 +94,7 @@ const SellerLanding = () => {
     setIsSubmitting(true);
 
     try {
-      if (user) {
+      if (buyerUser) {
         const result = await updateUser({ role: 'seller', verified: false });
         if (!result.ok) {
           toast({ title: 'Seller registration failed', description: result.msg });
@@ -111,7 +111,7 @@ const SellerLanding = () => {
         });
 
         if (!result.ok) {
-          const loginResult = await login(form.phone, form.password);
+          const loginResult = await login(form.phone, form.password, { allowedRoles: ['seller'] });
           if (!loginResult.ok) {
             toast({ title: 'Seller registration failed', description: result.msg });
             return;
