@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BriefcaseBusiness, Heart, Home, MapPin, Meh, ShoppingCart } from 'lucide-react';
 import { PRODUCTS } from '../data/catalog';
 import { useApp } from '../context/AppContext';
-import { peso_fmt } from '../components/ProductCard';
+import { getDiscountPercent, peso_fmt } from '../components/ProductCard';
 
 const maskEmail = (email = '') => {
   const [name, domain] = email.split('@');
@@ -305,7 +305,7 @@ const WishlistPanel = ({ products }) => (
           <img src={product.image} alt={product.name} loading="lazy" />
           <p>{product.name}</p>
           <strong>{peso_fmt(product.price)}</strong>
-          <span><s>{peso_fmt(product.originalPrice)}</s> -{product.discount}%</span>
+          {getDiscountPercent(product) > 0 && <span><s>{peso_fmt(product.originalPrice)}</s> -{getDiscountPercent(product)}%</span>}
           <div>
             <small>★★★★★ ({product.sold})</small>
             <button type="button" aria-label={`Add ${product.name} to cart`}>

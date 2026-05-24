@@ -11,7 +11,7 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   try {
     const session = JSON.parse(localStorage.getItem('lazada_session') || 'null');
-    if (session?.token) config.headers.Authorization = `Bearer ${session.token}`;
+    if (session?.token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${session.token}`;
   } catch {
     // Ignore broken local session data; protected endpoints will return 401.
   }

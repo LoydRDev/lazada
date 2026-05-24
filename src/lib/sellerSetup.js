@@ -3,6 +3,7 @@ export const isGeneratedSellerBusiness = (user) => user?.businessName === `${use
 export const isGeneratedSellerPermit = (user) => String(user?.idDocument || '').startsWith('PERMIT-');
 
 export const isSellerSetupComplete = (user) => Boolean(
+  user?.verified ||
   user?.storeName &&
   user?.businessName &&
   user?.idDocument &&

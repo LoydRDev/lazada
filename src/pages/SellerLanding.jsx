@@ -64,7 +64,7 @@ const faqs = [
 ];
 
 const SellerLanding = () => {
-  const { buyerUser, register, login, updateUser } = useApp();
+  const { register, login } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
@@ -81,8 +81,10 @@ const SellerLanding = () => {
     event.preventDefault();
     if (isSubmitting) return;
 
-    if (!/^9\d{9}$/.test(form.phone)) {
-      toast({ title: 'Invalid phone number', description: 'Enter a valid PH mobile number without the +63 prefix.' });
+    const normalizedPhone = form.phone.replace(/^0/, '');
+
+    if (!/^9\d{9}$/.test(normalizedPhone)) {
+      toast({ title: 'Invalid phone number', description: 'Enter a valid PH mobile number like 9123456789 or 09123456789.' });
       return;
     }
 
@@ -94,28 +96,20 @@ const SellerLanding = () => {
     setIsSubmitting(true);
 
     try {
-      if (buyerUser) {
-        const result = await updateUser({ role: 'seller', verified: false });
-        if (!result.ok) {
+      const sellerPhone = `+63${normalizedPhone}`;
+      const result = await register({
+        email: `seller${normalizedPhone}@seller.lazada.ph`,
+        password: form.password,
+        name: `Seller ${normalizedPhone.slice(-4)}`,
+        role: 'seller',
+        phone: sellerPhone,
+      });
+
+      if (!result.ok) {
+        const loginResult = await login(normalizedPhone, form.password, { allowedRoles: ['seller'] });
+        if (!loginResult.ok) {
           toast({ title: 'Seller registration failed', description: result.msg });
           return;
-        }
-      } else {
-        const sellerPhone = `+63${form.phone}`;
-        const result = await register({
-          email: `seller${form.phone}@seller.lazada.ph`,
-          password: form.password,
-          name: `Seller ${form.phone.slice(-4)}`,
-          role: 'seller',
-          phone: sellerPhone,
-        });
-
-        if (!result.ok) {
-          const loginResult = await login(form.phone, form.password, { allowedRoles: ['seller'] });
-          if (!loginResult.ok) {
-            toast({ title: 'Seller registration failed', description: result.msg });
-            return;
-          }
         }
       }
 

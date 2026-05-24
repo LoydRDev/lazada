@@ -42,7 +42,7 @@ const Header = () => {
     if (isLoggingOut) return;
 
     setIsLoggingOut(true);
-    await logout();
+    await logout(1000, 'buyer');
     navigate('/');
     setIsLoggingOut(false);
   };

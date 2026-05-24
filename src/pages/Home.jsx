@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { FLASH_SALE, PRODUCTS } from '../data/catalog';
 import { useApp } from '../context/AppContext';
-import { ProductCardSkeleton } from '../components/ProductCard';
+import { getDiscountPercent, ProductCardSkeleton } from '../components/ProductCard';
 
 const peso = (n) => `\u20b1${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
@@ -269,7 +269,7 @@ const RecommendationCard = ({ product }) => (
     <h3>{product.name}</h3>
     <div className="recommend-price">
       <strong>{peso(product.price)}</strong>
-      {product.discount ? <span>-{product.discount}%</span> : null}
+      {getDiscountPercent(product) ? <span>-{getDiscountPercent(product)}%</span> : null}
     </div>
     <div className="recommend-rating">
       {Array.from({ length: 5 }).map((_, index) => (

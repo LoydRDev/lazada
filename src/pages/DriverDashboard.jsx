@@ -18,7 +18,8 @@ const driverActions = {
 };
 
 const DriverDashboard = () => {
-  const { user, driverUser, orders, refreshDriverDeliveries, updateDriverDelivery, logout } = useApp();
+  const { driverUser, orders, refreshDriverDeliveries, updateDriverDelivery, logout } = useApp();
+  const user = driverUser;
   const { toast } = useToast();
   const navigate = useNavigate();
   const [busyItemId, setBusyItemId] = useState(null);
@@ -45,7 +46,7 @@ const DriverDashboard = () => {
   };
 
   const signOut = async () => {
-    await logout(200);
+    await logout(200, 'driver');
     navigate('/driver/login');
   };
 

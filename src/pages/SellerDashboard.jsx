@@ -44,6 +44,7 @@ const sellerMenu = [
 const defaultForm = {
   name: '',
   price: '',
+  specialPrice: '',
   originalPrice: '',
   stock: '',
   brand: '',
@@ -175,6 +176,13 @@ const buildVariantRows = (options, basePrice, baseStock) => {
   }));
 };
 
+const getPricing = (form) => {
+  const regularPrice = Number(form.price);
+  const specialPrice = Number(form.specialPrice);
+  const sellingPrice = specialPrice > 0 ? specialPrice : regularPrice;
+  return { regularPrice, sellingPrice };
+};
+
 const readResizedImage = (file, maxSize = 900, quality = 0.82) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => {
@@ -196,7 +204,7 @@ const readResizedImage = (file, maxSize = 900, quality = 0.82) => new Promise((r
 });
 
 const SellerDashboard = () => {
-  const { user, sellerProducts, drivers, categories, addSellerProduct, updateSellerProduct, removeSellerProduct, orders, refreshSellerOrders, updateSellerOrderItem } = useApp();
+  const { sellerUser: user, sellerProducts, drivers, categories, addSellerProduct, updateSellerProduct, removeSellerProduct, orders, refreshSellerOrders, updateSellerOrderItem } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -226,7 +234,8 @@ const SellerDashboard = () => {
     setForm({
       ...defaultForm,
       name: editableProduct.name || '',
-      price: editableProduct.price || '',
+      price: editableProduct.originalPrice || editableProduct.price || '',
+      specialPrice: editableProduct.originalPrice > editableProduct.price ? editableProduct.price : '',
       originalPrice: editableProduct.originalPrice || editableProduct.price || '',
       stock: editableProduct.stock || '',
       brand: editableProduct.brand || '',
@@ -311,12 +320,13 @@ const SellerDashboard = () => {
       toast({ title: 'Account not verified', description: 'An admin must approve your seller account before you can list products.' });
       return;
     }
-    if (Number(form.price) <= 0 || Number(form.stock) < 0) {
+    const { regularPrice, sellingPrice } = getPricing(form);
+    if (regularPrice <= 0 || sellingPrice <= 0 || Number(form.stock) < 0) {
       toast({ title: 'Invalid price/stock' });
       return;
     }
-    if (Number(form.originalPrice) && Number(form.originalPrice) < Number(form.price)) {
-      toast({ title: 'Misleading discount', description: 'Original price must be greater than or equal to selling price.' });
+    if (form.specialPrice && sellingPrice >= regularPrice) {
+      toast({ title: 'Misleading discount', description: 'Special price must be lower than the regular price.' });
       return;
     }
     if (!form.images.length) {
@@ -332,7 +342,7 @@ const SellerDashboard = () => {
       .filter(([, value]) => String(value || '').trim())
       .map(([label, value]) => ({ label, values: [String(value).trim()] }));
     const variants = form.hasVariants
-      ? (form.variants.length ? form.variants : buildVariantRows(form.variantOptions, form.price, form.stock))
+      ? (form.variants.length ? form.variants : buildVariantRows(form.variantOptions, sellingPrice, form.stock))
       : [];
     if (form.hasVariants && variants.length === 0) {
       toast({ title: 'Variants required', description: 'Add variant groups and generate variant combinations, or turn variants off.' });
@@ -350,8 +360,8 @@ const SellerDashboard = () => {
 
     await addSellerProduct({
       name: form.name,
-      price: Number(form.price),
-      originalPrice: Number(form.originalPrice) || Number(form.price),
+      price: sellingPrice,
+      originalPrice: regularPrice,
       stock: Number(form.stock),
       brand: form.brand,
       category: form.category,
@@ -372,7 +382,7 @@ const SellerDashboard = () => {
       dimensions: form.dimensions,
       shippingFee: Number(form.shippingFee) || 0,
       description: form.description,
-      discount: form.originalPrice ? Math.round((1 - form.price / form.originalPrice) * 100) : 0,
+      discount: form.specialPrice ? Math.round((1 - sellingPrice / regularPrice) * 100) : 0,
       specs: {
         ...form.specs,
         subcategory: form.subcategory,
@@ -401,15 +411,20 @@ const SellerDashboard = () => {
       toast({ title: 'Duplicate variants', description: 'Variant combinations must be unique.' });
       return;
     }
-    if (Number(form.price) <= 0 || Number(form.stock) < 0 || variants.some((variant) => Number(variant.price) <= 0 || Number(variant.stock) < 0)) {
+    const { regularPrice, sellingPrice } = getPricing(form);
+    if (regularPrice <= 0 || sellingPrice <= 0 || Number(form.stock) < 0 || variants.some((variant) => Number(variant.price) <= 0 || Number(variant.stock) < 0)) {
       toast({ title: 'Invalid price/stock', description: 'Price must be positive and stock cannot be negative.' });
+      return;
+    }
+    if (form.specialPrice && sellingPrice >= regularPrice) {
+      toast({ title: 'Misleading discount', description: 'Special price must be lower than the regular price.' });
       return;
     }
     try {
       await updateSellerProduct(editableProduct.id, {
         name: form.name,
-        price: Number(form.price),
-        originalPrice: Number(form.originalPrice) || Number(form.price),
+        price: sellingPrice,
+        originalPrice: regularPrice,
         stock: Number(form.stock),
         brand: form.brand,
         category: form.category,
@@ -806,7 +821,7 @@ const AddProductPage = ({ form, setField, patchForm, handleAdd, categories = VIS
   };
 
   const generateVariants = () => {
-    patchForm({ variants: buildVariantRows(form.variantOptions, form.price, form.stock) });
+    patchForm({ variants: buildVariantRows(form.variantOptions, getPricing(form).sellingPrice, form.stock) });
   };
 
   const updateVariant = (variantId, field, value) => {
@@ -946,8 +961,8 @@ const AddProductPage = ({ form, setField, patchForm, handleAdd, categories = VIS
           </div>
         )}
         <div className="seller-add-stock-grid">
-          <label><span>* Price</span><input required type="number" min="1" value={form.price} onChange={e => setField('price', e.target.value)} placeholder="₱" /></label>
-          <label><span>Special Price</span><input type="number" min="0" value={form.originalPrice} onChange={e => setField('originalPrice', e.target.value)} placeholder="Add" /></label>
+          <label><span>* Price</span><input required type="number" min="1" value={form.price} onChange={e => setField('price', e.target.value)} placeholder="Regular price" /></label>
+          <label><span>Special Price</span><input type="number" min="0" value={form.specialPrice} onChange={e => setField('specialPrice', e.target.value)} placeholder="Sale price" /></label>
           <label><span>Stock</span><input required type="number" min="0" value={form.stock} onChange={e => setField('stock', e.target.value)} /></label>
           <label><span>SellerSKU</span><input placeholder="Seller SKU" /></label>
           <label><span>Status</span><select value={form.status} onChange={e => setField('status', e.target.value)}><option value="Active">Active</option><option value="OutOfStock">Out of Stock</option><option value="Discontinued">Discontinued</option></select></label>

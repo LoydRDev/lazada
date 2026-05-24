@@ -16,11 +16,28 @@ const Category = () => {
 
   const activeCategories = (categories.length ? categories : VISIBLE_CATEGORIES).filter(c => (c.status || 'Active') === 'Active' && !c.hidden);
   const cat = activeCategories.find(c => c.id === id || c.slug === id) || CATEGORIES.find(c => c.id === id);
+  const activeCategoryKey = cat?.slug || cat?.id || id;
+  const normalizedQuery = q?.trim().toLowerCase();
+  const isSubcategoryQuery = Boolean(
+    normalizedQuery
+    && cat?.subcategories?.some((subcategory) => subcategory.toLowerCase() === normalizedQuery)
+  );
 
   const filtered = useMemo(() => {
     let list = sellerProducts;
-    if (id) list = list.filter(p => p.category === id);
-    if (q) list = list.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) || p.brand.toLowerCase().includes(q.toLowerCase()));
+    if (activeCategoryKey) list = list.filter(p => p.category === activeCategoryKey || p.category === id);
+    if (normalizedQuery) {
+      if (isSubcategoryQuery) {
+        const subcategoryMatches = list.filter(p => String(p.subcategory || '').toLowerCase() === normalizedQuery);
+        list = subcategoryMatches.length ? subcategoryMatches : list;
+      } else {
+        list = list.filter(p => (
+          p.name.toLowerCase().includes(normalizedQuery)
+          || String(p.brand || '').toLowerCase().includes(normalizedQuery)
+          || String(p.description || '').toLowerCase().includes(normalizedQuery)
+        ));
+      }
+    }
     if (minRating > 0) list = list.filter(p => p.rating >= minRating);
     if (priceRange.min) list = list.filter(p => p.price >= Number(priceRange.min));
     if (priceRange.max) list = list.filter(p => p.price <= Number(priceRange.max));
@@ -29,7 +46,7 @@ const Category = () => {
     if (sortBy === 'rating') list = [...list].sort((a, b) => b.rating - a.rating);
     if (sortBy === 'sold') list = [...list].sort((a, b) => b.sold - a.sold);
     return list;
-  }, [sellerProducts, id, q, sortBy, minRating, priceRange]);
+  }, [sellerProducts, activeCategoryKey, id, normalizedQuery, isSubcategoryQuery, sortBy, minRating, priceRange]);
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-4">

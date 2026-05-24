@@ -4,7 +4,16 @@ import { Star } from 'lucide-react';
 
 const peso = (n) => '₱' + n.toLocaleString('en-PH');
 
+export const getDiscountPercent = (product, activePrice = product?.price) => {
+  const price = Number(activePrice || 0);
+  const originalPrice = Number(product?.originalPrice || 0);
+  if (!price || !originalPrice || originalPrice <= price) return 0;
+  return Math.max(0, Math.round((1 - price / originalPrice) * 100));
+};
+
 const ProductCard = ({ product, compact = false }) => {
+  const discount = getDiscountPercent(product);
+
   return (
     <Link to={`/product/${product.id}`} className="product-card block bg-white rounded-md overflow-hidden border border-gray-100">
       <div className="aspect-square bg-gray-50 overflow-hidden">
@@ -18,9 +27,9 @@ const ProductCard = ({ product, compact = false }) => {
             <span className="text-xs text-gray-400 line-through">{peso(product.originalPrice)}</span>
           )}
         </div>
-        {product.discount > 0 && (
+        {discount > 0 && (
           <div className="inline-block text-[10px] px-1.5 py-0.5 bg-orange-50 text-orange-600 font-semibold rounded">
-            -{product.discount}%
+            -{discount}%
           </div>
         )}
         <div className="flex items-center justify-between text-xs text-gray-500">

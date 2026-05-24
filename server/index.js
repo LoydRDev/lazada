@@ -166,7 +166,35 @@ const toCategory = (row) => ({
   icon: row.cat_icon || '',
   status: row.cat_status || 'Active',
   active: row.cat_status === 'Active',
+  parentId: row.cat_parent_category_id || null,
 });
+
+const toCategoryTree = (rows = []) => {
+  const categoriesById = new Map();
+  const childrenByParentId = new Map();
+
+  rows.forEach((row) => {
+    if (row.cat_parent_category_id) {
+      const children = childrenByParentId.get(row.cat_parent_category_id) || [];
+      children.push(row);
+      childrenByParentId.set(row.cat_parent_category_id, children);
+      return;
+    }
+
+    categoriesById.set(row.cat_id, {
+      ...toCategory(row),
+      subcategories: [],
+    });
+  });
+
+  childrenByParentId.forEach((children, parentId) => {
+    const parent = categoriesById.get(parentId);
+    if (!parent) return;
+    parent.subcategories = children.map((child) => child.cat_name);
+  });
+
+  return [...categoriesById.values()];
+};
 
 const activeMemoryCategories = () => memoryCategories.filter((category) => category.status === 'Active');
 
@@ -261,8 +289,17 @@ const normalizeProductVariant = (variant, productId, index, defaults = {}) => {
   };
 };
 
+const discountPercent = (price, originalPrice) => {
+  const current = Number(price || 0);
+  const original = Number(originalPrice || 0);
+  if (!current || !original || original <= current) return 0;
+  return Math.max(0, Math.round((1 - current / original) * 100));
+};
+
 const prepareProductPayload = (body) => {
   const productId = body.id || nextId(10000000);
+  const price = Number(body.price || 0);
+  const originalPrice = Math.max(Number(body.originalPrice || price), price);
   const images = (body.images?.length ? body.images : [body.image]).filter(Boolean);
   const variantGroups = normalizeVariantGroups(body.variantGroups || body.variantOptions || body.specs?.variantGroups || []);
   const hasVariants = Boolean(body.hasVariants ?? body.variants?.length);
@@ -282,8 +319,9 @@ const prepareProductPayload = (body) => {
     sold: 0,
     images,
     image: body.image || images[0],
-    originalPrice: body.originalPrice || body.price,
-    discount: body.discount || 0,
+    price,
+    originalPrice,
+    discount: discountPercent(price, originalPrice),
     hasVariants: variants.length > 0,
     variantGroups,
     variants,
@@ -371,6 +409,8 @@ const toUser = (row) => ({
 
 const toProduct = (row) => {
   const specs = typeof row.prod_specs === 'string' ? JSON.parse(row.prod_specs || '{}') : row.prod_specs || {};
+  const price = Number(row.prod_price);
+  const originalPrice = Math.max(Number(row.prod_original_price || price), price);
   const variants = (specs.variants || []).map((variant, index) => normalizeProductVariant(variant, row.prod_id, index, {
     price: row.prod_price,
     stock: row.prod_stock_qty,
@@ -381,8 +421,8 @@ const toProduct = (row) => {
   return {
     id: row.prod_id,
     name: row.prod_name,
-    price: Number(row.prod_price),
-    originalPrice: Number(row.prod_original_price),
+    price,
+    originalPrice,
     image: row.prod_image,
     category: row.cat_slug || CATEGORIES[0].id,
     subcategory: specs.subcategory || '',
@@ -390,7 +430,7 @@ const toProduct = (row) => {
     sold: Number(row.prod_total_sold || 0),
     sellerId: row.prod_sell_id,
     stock: Number(row.prod_stock_qty),
-    discount: Number(row.prod_discount_percent || 0),
+    discount: discountPercent(price, originalPrice),
     brand: row.prod_brand || '',
     description: row.prod_desc,
     images: typeof row.prod_images === 'string' ? JSON.parse(row.prod_images || '[]') : row.prod_images || [],
@@ -711,7 +751,7 @@ app.get('/api/bootstrap', async (_req, res, next) => {
       products: products.map(toProduct),
       orders,
       drivers: drivers.map(toDriver),
-      categories: categories.map(toCategory),
+      categories: toCategoryTree(categories),
     });
   } catch (error) {
     next(error);
@@ -739,7 +779,7 @@ app.get('/api/admin/categories', authRequired, requireRole('admin'), async (_req
       return;
     }
     const categories = await query('SELECT * FROM categories ORDER BY cat_name ASC');
-    res.json({ categories: categories.map(toCategory) });
+    res.json({ categories: toCategoryTree(categories) });
   } catch (error) {
     next(error);
   }
@@ -1349,6 +1389,11 @@ app.patch('/api/products/:id', authRequired, async (req, res, next) => {
 
     const current = toProduct(rows[0]);
     const nextImages = req.body.images || current.images || [current.image];
+    const nextPrice = price ?? current.price;
+    const nextOriginalPrice = Math.max(
+      req.body.originalPrice === undefined ? current.originalPrice : Number(req.body.originalPrice),
+      nextPrice,
+    );
     const nextSpecs = {
       ...(current.specs || {}),
       ...(req.body.specs || {}),
@@ -1369,6 +1414,7 @@ app.patch('/api/products/:id', authRequired, async (req, res, next) => {
               prod_status = COALESCE(:status, prod_status),
               prod_specs = :specs,
               prod_original_price = COALESCE(:originalPrice, prod_original_price),
+              prod_discount_percent = :discount,
               prod_image = COALESCE(:image, prod_image),
               prod_images = :images
         WHERE prod_id = :id`,
@@ -1382,7 +1428,8 @@ app.patch('/api/products/:id', authRequired, async (req, res, next) => {
         brand: req.body.brand || null,
         status: status || null,
         specs: JSON.stringify(nextSpecs),
-        originalPrice: req.body.originalPrice === undefined ? null : Number(req.body.originalPrice),
+        originalPrice: req.body.originalPrice === undefined ? null : nextOriginalPrice,
+        discount: discountPercent(nextPrice, nextOriginalPrice),
         image: req.body.image || nextImages[0] || null,
         images: JSON.stringify(nextImages),
       },

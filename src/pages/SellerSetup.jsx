@@ -20,7 +20,7 @@ const validIdTypes = ['TIN ID', "Driver's License", 'National ID', 'SSS', 'Passp
 const sampleValidId = '/id/O1CN010x4RW91dMjA5xK4rP_!!6000000003722-2-tps-525-336.webp';
 
 const SellerSetup = () => {
-  const { user, updateUser, logout } = useApp();
+  const { sellerUser: user, updateUser, logout } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -77,12 +77,10 @@ const SellerSetup = () => {
     setIsSubmitting(true);
 
     await updateUser({
-      role: 'seller',
-      verified: false,
       storeName: form.storeName.trim(),
       businessName: form.businessName.trim(),
       idDocument: `${form.idType}: ${form.permitNo.trim()}`,
-    });
+    }, 'seller');
 
     toast({ title: 'Valid ID submitted', description: 'Your seller account is now pending admin verification.' });
     navigate('/seller/dashboard');
@@ -91,7 +89,7 @@ const SellerSetup = () => {
   const signOut = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
-    await logout();
+    await logout(1000, 'seller');
     navigate('/seller/login');
     setIsLoggingOut(false);
   };

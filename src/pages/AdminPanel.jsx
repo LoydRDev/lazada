@@ -88,7 +88,7 @@ const AdminLogin = ({ login, currentRole }) => {
 
 const AdminPanel = () => {
   const {
-    user,
+    adminUser: user,
     users,
     sellerProducts,
     orders,
@@ -157,7 +157,7 @@ const AdminPanel = () => {
   const signOut = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
-    await logout();
+    await logout(1000, 'admin');
     navigate('/login');
     setIsLoggingOut(false);
   };

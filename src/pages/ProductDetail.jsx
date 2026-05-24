@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES, PRODUCTS, SELLERS } from '../data/catalog';
-import { peso_fmt } from '../components/ProductCard';
+import { getDiscountPercent, peso_fmt } from '../components/ProductCard';
 import { useToast } from '../hooks/use-toast';
 
 const estimatedDeliveryDate = new Date('2026-05-19T00:00:00+08:00');
@@ -314,6 +314,7 @@ const ProductDetail = () => {
     ? activeVariants.find((variant) => specGroups.every((group) => selectedSpecs[group.label] && variant.attributes?.[group.label] === selectedSpecs[group.label])) || null
     : null;
   const activePrice = Number(selectedVariant?.price || product.price);
+  const activeDiscount = getDiscountPercent(product, activePrice);
   const activeStock = Number(hasSelectableVariants ? selectedVariant?.stock || 0 : product.stock);
   const displayImage = selectedVariant?.image || images[Math.min(activeImg, images.length - 1)];
   const selectedVariantName = selectedVariant?.variantName || Object.values(selectedVariant?.attributes || {}).join(' / ');
@@ -485,7 +486,7 @@ const ProductDetail = () => {
           <div className="product-price-block">
             <strong>{peso_fmt(activePrice)}</strong>
             {product.originalPrice > activePrice && <s>{peso_fmt(product.originalPrice)}</s>}
-            {product.discount > 0 && <span>-{product.discount}%</span>}
+            {activeDiscount > 0 && <span>-{activeDiscount}%</span>}
           </div>
           <p className="text-sm text-gray-500 mt-2">
             {hasSelectableVariants
@@ -661,7 +662,7 @@ const ProductDetail = () => {
                 <h3>{item.name}</h3>
                 <div className="recommend-price">
                   <strong>{peso_fmt(item.price)}</strong>
-                  {item.discount ? <span>-{item.discount}%</span> : null}
+                  {getDiscountPercent(item) ? <span>-{getDiscountPercent(item)}%</span> : null}
                 </div>
                 <div className="recommend-rating">
                   {Array.from({ length: 5 }).map((_, index) => (
