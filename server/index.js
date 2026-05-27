@@ -2,19 +2,22 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
-import { CATEGORIES, PRODUCTS } from '../src/data/catalog.js';
+import { CATEGORIES, PRODUCTS, SELLERS } from '../src/data/catalog.js';
 import { DEFAULT_ADMIN } from '../src/data/defaultUsers.js';
-import { isDbConfigured, query } from './db.js';
-import { ensureSeedData, ensureSellerForUser, ids } from './seed.js';
+import { query } from './db.js';
+import { ensureSellerForUser, ids } from './seed.js';
+import { loadNoSqlStore, nosqlDbPath, saveNoSqlStore } from './nosqlStore.js';
+import {
+  firebaseStoreName,
+  isFirebaseConfigured,
+  loadFirebaseStore,
+  saveFirebaseStore,
+} from './firebaseStore.js';
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
-let dbReady = isDbConfigured;
-let memoryUsers = [DEFAULT_ADMIN];
-let memoryProducts = PRODUCTS;
-let memoryOrders = [];
-let memoryReviews = [];
-let memoryCategories = CATEGORIES.map((category, index) => ({
+let dbReady = false;
+const defaultCategories = CATEGORIES.map((category, index) => ({
   id: category.id,
   slug: category.id,
   name: category.name,
@@ -24,25 +27,111 @@ let memoryCategories = CATEGORIES.map((category, index) => ({
   sortOrder: index,
   subcategories: category.subcategories || [],
 }));
-let memoryAdminLogs = [];
-let memoryRemovedProducts = [];
-const memoryDrivers = [
+const defaultDrivers = [
   { id: 700001, name: 'Juan Dela Cruz', phone: '+639171110001', vehicle: 'Motorcycle', plate: 'NCR-1021', company: 'Lazada Logistics' },
   { id: 700002, name: 'Maria Santos', phone: '+639171110002', vehicle: 'Van', plate: 'NCR-2045', company: 'Lazada Logistics' },
   { id: 700003, name: 'Carlo Reyes', phone: '+639171110003', vehicle: 'Motorcycle', plate: 'NCR-7788', company: 'Lazada Express' },
 ];
-memoryUsers = [
-  ...memoryUsers,
-  ...memoryDrivers.map((driver) => ({
-    id: driver.id,
-    email: `${driver.name.toLowerCase().replace(/\s+/g, '.')}@driver.lazada.ph`,
-    password: 'driver123',
-    name: driver.name,
-    role: 'driver',
-    verified: true,
-    phone: driver.phone,
-  })),
-];
+
+const driverUsers = (drivers) => drivers.map((driver) => ({
+  id: driver.id,
+  email: `${driver.name.toLowerCase().replace(/\s+/g, '.')}@driver.lazada.ph`,
+  password: 'driver123',
+  name: driver.name,
+  role: 'driver',
+  verified: true,
+  phone: driver.phone,
+}));
+
+const buildSellerDocuments = (users = [], products = []) => {
+  const sellers = new Map(SELLERS.map((seller) => [String(seller.id), {
+    id: seller.id,
+    userId: null,
+    storeName: seller.name,
+    businessName: seller.name,
+    name: seller.name,
+    verified: Boolean(seller.verified),
+    rating: seller.rating || 0,
+    productCount: products.filter((product) => String(product.sellerId) === String(seller.id)).length || seller.products || 0,
+    followers: seller.followers || '0',
+    status: seller.verified ? 'Active' : 'Pending',
+  }]));
+
+  users
+    .filter((user) => denormalizeRole(user.role) === 'seller')
+    .forEach((user) => {
+      const id = String(user.sellerId || user.id);
+      sellers.set(id, {
+        id,
+        userId: user.id,
+        storeName: user.storeName || user.businessName || `${user.name}'s Store`,
+        businessName: user.businessName || user.storeName || `${user.name}'s Business`,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || null,
+        verified: Boolean(user.verified),
+        rating: user.rating || 0,
+        productCount: products.filter((product) => String(product.sellerId) === id || String(product.sellerId) === String(user.id)).length,
+        followers: user.followers || '0',
+        status: user.verified ? 'Active' : 'Pending',
+        idDocument: user.idDocument || null,
+        createdAt: user.createdAt || null,
+      });
+    });
+
+  return [...sellers.values()];
+};
+
+const defaultNoSqlCollections = () => ({
+  users: [DEFAULT_ADMIN, ...driverUsers(defaultDrivers)],
+  sellers: buildSellerDocuments([DEFAULT_ADMIN, ...driverUsers(defaultDrivers)], PRODUCTS),
+  products: PRODUCTS,
+  orders: [],
+  reviews: [],
+  categories: defaultCategories,
+  adminLogs: [],
+  removedProducts: [],
+  drivers: defaultDrivers,
+});
+
+let memoryUsers = [];
+let memoryProducts = [];
+let memoryOrders = [];
+let memoryReviews = [];
+let memoryCategories = [];
+let memoryAdminLogs = [];
+let memoryRemovedProducts = [];
+let memoryDrivers = [];
+let activeNoSqlMode = 'nosql';
+let activeStoreName = `local JSON document store (${nosqlDbPath})`;
+let saveCollections = saveNoSqlStore;
+
+const applyNoSqlCollections = (collections) => {
+  memoryDrivers = collections.drivers;
+  const requiredUsers = [DEFAULT_ADMIN, ...driverUsers(memoryDrivers)];
+  memoryUsers = [
+    ...requiredUsers.filter((required) => !collections.users.some((user) => String(user.id) === String(required.id))),
+    ...collections.users,
+  ];
+  memoryProducts = collections.products;
+  memoryOrders = collections.orders;
+  memoryReviews = collections.reviews;
+  memoryCategories = collections.categories;
+  memoryAdminLogs = collections.adminLogs;
+  memoryRemovedProducts = collections.removedProducts;
+};
+
+const saveNoSqlState = () => saveCollections({
+  users: memoryUsers,
+  sellers: buildSellerDocuments(memoryUsers, memoryProducts),
+  products: memoryProducts,
+  orders: memoryOrders,
+  reviews: memoryReviews,
+  categories: memoryCategories,
+  adminLogs: memoryAdminLogs,
+  removedProducts: memoryRemovedProducts,
+  drivers: memoryDrivers,
+});
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json({ limit: '8mb' }));
@@ -208,6 +297,7 @@ const logAdminAction = async (adminId, action, detail = {}) => {
   };
   if (!dbReady) {
     memoryAdminLogs = [entry, ...memoryAdminLogs];
+    await saveNoSqlState();
     return entry;
   }
   await query(
@@ -583,6 +673,20 @@ const paymentMethod = (payment) => {
   return 'COD';
 };
 
+const normalizeRegistrationPhone = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return { phone: null };
+  if (!/^[0-9\s()+.-]+$/.test(raw)) {
+    return { error: 'Phone number can only use digits and common separators.' };
+  }
+
+  const digits = raw.replace(/\D/g, '');
+  if (/^09\d{9}$/.test(digits)) return { phone: `+63${digits.slice(1)}` };
+  if (/^9\d{9}$/.test(digits)) return { phone: `+63${digits}` };
+  if (/^639\d{9}$/.test(digits)) return { phone: `+${digits}` };
+  return { error: 'Use a valid Philippine mobile number, for example 09171234567.' };
+};
+
 const userSelect = `
   SELECT u.*, s.sell_id, s.sell_store_name, s.sell_b_name, s.sell_b_permit_no
   FROM users u
@@ -671,8 +775,9 @@ const loadOrders = async (where = '', params = {}) => {
 
 const findMemoryOrder = (orderId) => memoryOrders.map(toMemoryOrder).find((order) => String(order.id) === String(orderId));
 
-const replaceMemoryOrder = (updatedOrder) => {
+const replaceMemoryOrder = async (updatedOrder) => {
   memoryOrders = memoryOrders.map((order) => (String(order.id) === String(updatedOrder.id) ? updatedOrder : order));
+  await saveNoSqlState();
 };
 
 const addOrderHistory = async ({ orderId, orderItemId, previousStatus, nextStatus, changedById, changedByRole, note = null }) => {
@@ -728,7 +833,7 @@ app.get('/api/bootstrap', async (_req, res, next) => {
       orders: memoryOrders.map(toMemoryOrder),
       drivers: memoryDrivers,
       categories: memoryCategories,
-      mode: 'memory',
+      mode: activeNoSqlMode,
     });
     return;
   }
@@ -1029,14 +1134,18 @@ app.post('/api/auth/register', async (req, res, next) => {
       storeName = null,
       businessName = null,
       idDocument = null,
-      phone = '+630000000000',
+      phone = null,
       address = null,
       firstName = null,
       middleInitial = null,
       lastName = null,
     } = req.body;
+    const phoneResult = normalizeRegistrationPhone(phone);
+    if (phoneResult.error) return res.status(400).json({ msg: phoneResult.error });
+    const normalizedPhoneValue = phoneResult.phone;
+
     if (!dbReady) {
-      if (memoryUsers.find((user) => user.email === email || user.phone === phone)) return res.status(409).json({ msg: 'Account already registered' });
+      if (memoryUsers.find((user) => user.email === email || (normalizedPhoneValue && user.phone === normalizedPhoneValue))) return res.status(409).json({ msg: 'Account already registered' });
       const user = {
         id: `u_${Date.now()}`,
         email,
@@ -1044,7 +1153,7 @@ app.post('/api/auth/register', async (req, res, next) => {
         name,
         role,
         verified: role === 'buyer',
-        phone,
+        phone: normalizedPhoneValue,
         address,
         storeName: role === 'seller' ? storeName : null,
         businessName: role === 'seller' ? businessName : null,
@@ -1052,11 +1161,12 @@ app.post('/api/auth/register', async (req, res, next) => {
         createdAt: new Date().toISOString(),
       };
       memoryUsers = [...memoryUsers, user];
+      await saveNoSqlState();
       res.status(201).json({ user, token: createToken(user) });
       return;
     }
 
-    const existing = await query('SELECT user_id FROM users WHERE user_email = :email OR user_phone_no = :phone LIMIT 1', { email, phone });
+    const existing = await query('SELECT user_id FROM users WHERE user_email = :email OR (:phone IS NOT NULL AND user_phone_no = :phone) LIMIT 1', { email, phone: normalizedPhoneValue });
     if (existing.length) return res.status(409).json({ msg: 'Account already registered' });
 
     const names = firstName || lastName
@@ -1072,7 +1182,7 @@ app.post('/api/auth/register', async (req, res, next) => {
       name: name || [firstName, middleInitial, lastName].filter(Boolean).join(' '),
       role,
       verified: role === 'buyer',
-      phone,
+      phone: normalizedPhoneValue,
       address,
       storeName: role === 'seller' ? storeName : null,
       businessName: role === 'seller' ? businessName : null,
@@ -1091,7 +1201,7 @@ app.post('/api/auth/register', async (req, res, next) => {
         lastName: names.lastName,
         email,
         password,
-        phone,
+        phone: normalizedPhoneValue,
         address: address ? JSON.stringify(address) : null,
         role: normalizeRole(role),
         verified: user.verified ? 1 : 0,
@@ -1158,6 +1268,7 @@ app.patch('/api/users/:id', authRequired, async (req, res, next) => {
       };
       memoryUsers = memoryUsers.map((user) => (user.id === req.params.id ? updated : user));
       if (isAdminUser(req.user) && verified !== undefined) await logAdminAction(req.user.id, verified ? 'seller_approved' : 'seller_rejected', { userId: req.params.id });
+      await saveNoSqlState();
       res.json({ user: updated });
       return;
     }
@@ -1227,6 +1338,7 @@ app.post('/api/products', authRequired, requireRole('seller'), async (req, res, 
     const product = prepareProductPayload(req.body);
     if (!dbReady) {
       memoryProducts = [product, ...memoryProducts];
+      await saveNoSqlState();
       res.status(201).json({ product });
       return;
     }
@@ -1364,6 +1476,7 @@ app.patch('/api/products/:id', authRequired, async (req, res, next) => {
       updated.sellerId = product.sellerId;
       updated.status = status || product.status || 'Active';
       memoryProducts = memoryProducts.map((entry) => (String(entry.id) === String(req.params.id) ? updated : entry));
+      await saveNoSqlState();
       res.json({ product: updated });
       return;
     }
@@ -1466,6 +1579,7 @@ app.patch('/api/products/:productId/variants/:variantId', authRequired, async (r
           : variant
       ));
       product.specs = { ...(product.specs || {}), variants: product.variants, hasVariants: product.variants.length > 0 };
+      await saveNoSqlState();
       res.json({ product });
       return;
     }
@@ -1537,6 +1651,7 @@ app.delete('/api/products/:id', authRequired, async (req, res, next) => {
         await logAdminAction(req.user.id, 'product_removed', { productId: product.id, name: product.name });
       }
       memoryProducts = memoryProducts.filter((entry) => String(entry.id) !== String(req.params.id));
+      await saveNoSqlState();
       res.status(204).end();
       return;
     }
@@ -1715,6 +1830,7 @@ app.post('/api/orders', authRequired, requireRole('buyer'), async (req, res, nex
         })),
       };
       memoryOrders = [memoryOrder, ...memoryOrders];
+      await saveNoSqlState();
       res.status(201).json({ order: toMemoryOrder(memoryOrder) });
       return;
     }
@@ -1862,7 +1978,7 @@ app.post('/api/orders/:id/cancel', authRequired, requireRole('buyer'), async (re
         status: 'cancelled',
         items: order.items.map((item) => ({ ...item, status: 'cancelled', updatedAt: new Date().toISOString() })),
       };
-      replaceMemoryOrder(updated);
+      await replaceMemoryOrder(updated);
       res.json({ order: toMemoryOrder(updated) });
       return;
     }
@@ -1936,15 +2052,11 @@ const updateSellerOrderItemStatus = async (req, res, next) => {
     if (!workflowStatuses.includes(targetStatus) || !allowedPreviousStatus[targetStatus]) {
       return res.status(400).json({ msg: 'Unsupported order status action.' });
     }
-    if (targetStatus === 'shipping' && !driverId) {
-      return res.status(400).json({ msg: 'Please select a driver before shipping this order.' });
-    }
 
     if (!dbReady) {
       const selectedDriver = targetStatus === 'shipping'
         ? memoryDrivers.find((driver) => String(driver.id) === String(driverId))
         : null;
-      if (targetStatus === 'shipping' && !selectedDriver) return res.status(400).json({ msg: 'Selected driver was not found.' });
       let matchedOrder = null;
       let matchedItem = null;
       const seller = memoryUsers.find((item) => String(item.id) === String(sellerUserId));
@@ -1963,24 +2075,33 @@ const updateSellerOrderItemStatus = async (req, res, next) => {
       if (!allowedPreviousStatus[targetStatus].includes(normalizeOrderStatus(matchedItem.status))) {
         return res.status(400).json({ msg: `Cannot move item from ${matchedItem.status} to ${targetStatus}.` });
       }
+      const bulkOrderApproval = ['to_be_packed', 'rejected'].includes(targetStatus);
+      const itemIdsToUpdate = new Set(
+        (bulkOrderApproval ? matchedOrder.items : [matchedItem])
+          .filter((item) => (
+            sellerIds.has(String(item.sellerId))
+            && allowedPreviousStatus[targetStatus].includes(normalizeOrderStatus(item.status))
+          ))
+          .map((item) => String(item.orderItemId)),
+      );
 
       const updated = {
         ...matchedOrder,
         items: matchedOrder.items.map((item) => (
-          String(item.orderItemId) === String(req.params.id)
+          itemIdsToUpdate.has(String(item.orderItemId))
             ? {
                 ...item,
                 status: targetStatus,
                 driver: selectedDriver ? { ...selectedDriver, trackingNumber: trackingNumber(matchedOrder.id, item.orderItemId) } : item.driver,
-                trackingNumber: selectedDriver ? trackingNumber(matchedOrder.id, item.orderItemId) : item.trackingNumber,
-                deliveryStatus: selectedDriver ? 'assigned' : item.deliveryStatus,
+                trackingNumber: targetStatus === 'shipping' ? trackingNumber(matchedOrder.id, item.orderItemId) : item.trackingNumber,
+                deliveryStatus: targetStatus === 'shipping' ? 'third_party_courier' : item.deliveryStatus,
                 updatedAt: new Date().toISOString(),
               }
             : item
         )),
       };
       updated.status = aggregateOrderStatus(updated.items);
-      replaceMemoryOrder(updated);
+      await replaceMemoryOrder(updated);
       res.json({ order: toMemoryOrder(updated) });
       return;
     }
@@ -2004,9 +2125,25 @@ const updateSellerOrderItemStatus = async (req, res, next) => {
       return res.status(400).json({ msg: `Cannot move item from ${currentStatus} to ${targetStatus}.` });
     }
 
-    const selectedDriver = targetStatus === 'shipping' ? await getDbDriver(driverId) : null;
-    if (targetStatus === 'shipping' && !selectedDriver) return res.status(400).json({ msg: 'Selected driver was not found.' });
-    const nextTrackingNumber = selectedDriver ? trackingNumber(item.oitem_order_id, item.oitem_id) : null;
+    const selectedDriver = targetStatus === 'shipping' && driverId ? await getDbDriver(driverId) : null;
+    if (driverId && targetStatus === 'shipping' && !selectedDriver) return res.status(400).json({ msg: 'Selected driver was not found.' });
+    const nextTrackingNumber = targetStatus === 'shipping' ? trackingNumber(item.oitem_order_id, item.oitem_id) : null;
+    const bulkOrderApproval = ['to_be_packed', 'rejected'].includes(targetStatus);
+    const rowsToUpdate = bulkOrderApproval
+      ? await query(
+        `SELECT oi.*
+           FROM order_items oi
+           JOIN sellers s ON s.sell_id = oi.oitem_sell_id
+          WHERE oi.oitem_order_id = :orderId
+            AND s.sell_user_id = :sellerUserId`,
+        { orderId: item.oitem_order_id, sellerUserId },
+      )
+      : [item];
+    const invalidBulkItem = rowsToUpdate.find((row) => !allowedPreviousStatus[targetStatus].includes(normalizeOrderStatus(row.oitem_item_status)));
+    if (invalidBulkItem) {
+      return res.status(400).json({ msg: `Cannot move item from ${invalidBulkItem.oitem_item_status} to ${targetStatus}.` });
+    }
+    const orderItemIds = rowsToUpdate.map((row) => row.oitem_id);
 
     await query(
       `UPDATE order_items
@@ -2018,7 +2155,7 @@ const updateSellerOrderItemStatus = async (req, res, next) => {
               oitem_tracking_number = COALESCE(:trackingNumber, oitem_tracking_number),
               oitem_delivery_status = COALESCE(:deliveryStatus, oitem_delivery_status),
               oitem_updated_at = CURRENT_TIMESTAMP
-        WHERE oitem_id = :orderItemId`,
+        WHERE ${bulkOrderApproval ? 'oitem_order_id = :orderId AND oitem_sell_id = :sellerId' : 'oitem_id = :orderItemId'}`,
       {
         status: targetStatus,
         driverId: selectedDriver?.id || null,
@@ -2026,7 +2163,9 @@ const updateSellerOrderItemStatus = async (req, res, next) => {
         driverPhone: selectedDriver?.phone || null,
         driverVehicle: selectedDriver ? `${selectedDriver.vehicle} ${selectedDriver.plate || ''}`.trim() : null,
         trackingNumber: nextTrackingNumber,
-        deliveryStatus: selectedDriver ? 'assigned' : null,
+        deliveryStatus: targetStatus === 'shipping' ? 'third_party_courier' : null,
+        orderId: item.oitem_order_id,
+        sellerId: item.oitem_sell_id,
         orderItemId: req.params.id,
       },
     );
@@ -2046,17 +2185,17 @@ const updateSellerOrderItemStatus = async (req, res, next) => {
         },
       );
     }
-    await addOrderHistory({
-      orderId: item.oitem_order_id,
-      orderItemId: item.oitem_id,
-      previousStatus: currentStatus,
+    await Promise.all(rowsToUpdate.map((row) => addOrderHistory({
+      orderId: row.oitem_order_id,
+      orderItemId: row.oitem_id,
+      previousStatus: row.oitem_item_status,
       nextStatus: targetStatus,
       changedById: sellerUserId,
       changedByRole: 'seller',
-      note: selectedDriver ? `Assigned driver: ${selectedDriver.name}` : note,
-    });
+      note: selectedDriver ? `Assigned driver: ${selectedDriver.name}` : note || (targetStatus === 'shipping' ? 'Handed to third-party courier' : null),
+    })));
     const updatedOrder = await setDbOrderAggregateStatus(item.oitem_order_id);
-    res.json({ order: updatedOrder });
+    res.json({ order: updatedOrder, updatedOrderItemIds: orderItemIds });
   } catch (error) {
     next(error);
   }
@@ -2131,7 +2270,7 @@ app.patch('/api/driver/deliveries/:id/:action', authRequired, requireRole('drive
         )),
       };
       updated.status = aggregateOrderStatus(updated.items);
-      replaceMemoryOrder(updated);
+      await replaceMemoryOrder(updated);
       res.json({ order: toMemoryOrder(updated) });
       return;
     }
@@ -2213,7 +2352,7 @@ app.post('/api/reviews', authRequired, requireRole('buyer'), async (req, res, ne
       };
       memoryReviews = [review, ...memoryReviews];
       const updated = toMemoryOrder(order);
-      replaceMemoryOrder(updated);
+      await replaceMemoryOrder(updated);
       res.status(201).json({ review, order: toMemoryOrder(updated) });
       return;
     }
@@ -2276,14 +2415,41 @@ app.use((err, _req, res) => {
   res.status(500).json({ msg: 'Server error', detail: err.message });
 });
 
-ensureSeedData()
-  .then(() => app.listen(port, () => {
-    console.log(`API running on http://localhost:${port}`);
-    if (!dbReady) console.log('Database is not configured; using in-memory mock data.');
-  }))
+const loadPersistentNoSqlStore = async (defaults) => {
+  if (isFirebaseConfigured) {
+    try {
+      const collections = await loadFirebaseStore(defaults);
+      if (collections) {
+        activeNoSqlMode = 'firebase';
+        activeStoreName = firebaseStoreName;
+        saveCollections = saveFirebaseStore;
+        return collections;
+      }
+    } catch (error) {
+      console.warn('Firebase Firestore unavailable; falling back to local JSON document store.');
+      console.warn(error.message);
+    }
+  }
+
+  activeNoSqlMode = 'nosql';
+  activeStoreName = `local JSON document store (${nosqlDbPath})`;
+  saveCollections = saveNoSqlStore;
+  return loadNoSqlStore(defaults);
+};
+
+loadPersistentNoSqlStore(defaultNoSqlCollections())
+  .then(async (collections) => {
+    applyNoSqlCollections(collections);
+    await saveNoSqlState();
+    app.listen(port, () => {
+      console.log(`API running on http://localhost:${port}`);
+      console.log(`NoSQL document database: ${activeStoreName}`);
+    });
+  })
   .catch((error) => {
     dbReady = false;
-    console.warn('Database unavailable; using in-memory mock data.');
+    applyNoSqlCollections(defaultNoSqlCollections());
+    console.warn('NoSQL database unavailable; using in-memory fallback.');
     console.warn(error.message);
     app.listen(port, () => console.log(`API running on http://localhost:${port}`));
   });

@@ -93,7 +93,12 @@ export const AppProvider = ({ children }) => {
   const setSessionUser = (sessionUser) => {
     const role = roleOf(sessionUser);
     if (!sessionRoles.includes(role)) return;
-    setSessions((current) => ({ ...current, [role]: sessionUser }));
+    setSessions((current) => {
+      const next = { ...current, [role]: sessionUser };
+      save(MOCK_SESSIONS_KEY, next);
+      save(MOCK_SESSION_KEY, sessionUser);
+      return next;
+    });
   };
 
   const patchSessionUser = (updatedUser) => {
@@ -109,7 +114,7 @@ export const AppProvider = ({ children }) => {
     if (users.find(u => u.email === email || (phone && u.phone === phone))) return { ok: false, msg: 'Account already registered' };
     try {
       const { data } = await api.post('/auth/register', { email, password, name, role, storeName, businessName, idDocument, phone, address, firstName, middleInitial, lastName });
-      setUsers([...users, data.user]);
+      setUsers((current) => [...current, data.user]);
       const sessionUser = { ...data.user, token: data.token };
       setSessionUser(sessionUser);
       return { ok: true, user: sessionUser };
@@ -170,6 +175,22 @@ export const AppProvider = ({ children }) => {
     Object.values(sessions).forEach((session) => {
       if (String(session?.id) === String(sellerId)) patchSessionUser(data.user);
     });
+  };
+
+  const refreshSessionUser = async (role) => {
+    const account = sessions[role];
+    if (!account) return { ok: false, msg: 'Not logged in' };
+    try {
+      const { data } = await api.get('/bootstrap');
+      const refreshed = data.users?.find((entry) => String(entry.id) === String(account.id));
+      if (!refreshed) return { ok: false, msg: 'Account not found' };
+      const updated = { ...account, ...refreshed, token: account.token };
+      patchSessionUser(updated);
+      setUsers((current) => current.map((entry) => (String(entry.id) === String(updated.id) ? updated : entry)));
+      return { ok: true, user: updated };
+    } catch (error) {
+      return { ok: false, msg: error.response?.data?.msg || 'Could not refresh account' };
+    }
   };
 
   const addToCart = (product, qty = 1) => {
@@ -381,7 +402,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       user, buyerUser, sellerUser, adminUser, driverUser, users, cart, orders, sellerProducts, drivers, categories, isDbConnected, isCatalogLoading,
-      register, login, logout, updateUser, verifySeller,
+      register, login, logout, updateUser, verifySeller, refreshSessionUser,
       addToCart, updateCartQty, removeFromCart, clearCart, clearCartItems,
       placeOrder, refreshBuyerOrders, refreshSellerOrders, refreshDriverDeliveries, cancelOrder, updateSellerOrderItem, updateDriverDelivery, submitProductReview,
       addSellerProduct, updateSellerProduct, removeSellerProduct, getProductById,

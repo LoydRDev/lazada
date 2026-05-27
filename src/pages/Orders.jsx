@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, Clock, MessageSquareText, Package, Star, Truck, XCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { peso_fmt } from '../components/ProductCard';
+import { peso_fmt } from '../lib/utils';
 import { useToast } from '../hooks/use-toast';
 
 const buyerStatus = {

@@ -1,15 +1,7 @@
 import 'react';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
-
-const peso = (n) => '₱' + n.toLocaleString('en-PH');
-
-export const getDiscountPercent = (product, activePrice = product?.price) => {
-  const price = Number(activePrice || 0);
-  const originalPrice = Number(product?.originalPrice || 0);
-  if (!price || !originalPrice || originalPrice <= price) return 0;
-  return Math.max(0, Math.round((1 - price / originalPrice) * 100));
-};
+import { getDiscountPercent, peso_fmt } from '../lib/utils';
 
 const ProductCard = ({ product, compact = false }) => {
   const discount = getDiscountPercent(product);
@@ -22,9 +14,9 @@ const ProductCard = ({ product, compact = false }) => {
       <div className={`p-3 ${compact ? 'space-y-1' : 'space-y-1.5'}`}>
         <div className="text-sm text-gray-800 line-clamp-2 min-h-[2.5rem]">{product.name}</div>
         <div className="flex items-baseline gap-2">
-          <span className="text-orange-600 font-bold text-base">{peso(product.price)}</span>
+          <span className="text-orange-600 font-bold text-base">{peso_fmt(product.price)}</span>
           {product.originalPrice > product.price && (
-            <span className="text-xs text-gray-400 line-through">{peso(product.originalPrice)}</span>
+            <span className="text-xs text-gray-400 line-through">{peso_fmt(product.originalPrice)}</span>
           )}
         </div>
         {discount > 0 && (
@@ -38,7 +30,7 @@ const ProductCard = ({ product, compact = false }) => {
               <Star key={i} className={`w-3 h-3 ${i < Math.round(product.rating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
             ))}
           </div>
-          <span>{product.sold > 1000 ? `${(product.sold/1000).toFixed(1)}k` : product.sold} sold</span>
+          <span>{product.sold > 1000 ? `${(product.sold / 1000).toFixed(1)}k` : product.sold} sold</span>
         </div>
       </div>
     </Link>
@@ -60,6 +52,4 @@ export const ProductCardSkeleton = ({ compact = false }) => (
   </article>
 );
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const peso_fmt = peso;
 export default ProductCard;

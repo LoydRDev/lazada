@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CheckCircle, Clock, Package, Truck, XCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { peso_fmt } from '../components/ProductCard';
+import { peso_fmt } from '../lib/utils';
 
 const detailStatus = {
   pending_approval: { label: 'Pending Seller Approval', icon: Clock, color: 'text-yellow-700 bg-yellow-50' },

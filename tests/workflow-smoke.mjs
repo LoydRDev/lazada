@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DEFAULT_ADMIN } from '../src/data/defaultUsers.js';
 
@@ -6,6 +8,7 @@ const port = Number(process.env.WORKFLOW_TEST_PORT || (4300 + (Date.now() % 500)
 const baseUrl = `http://127.0.0.1:${port}/api`;
 const startedAt = Date.now();
 const stamp = startedAt.toString().slice(-6);
+const nosqlDbPath = join(tmpdir(), `lazada-workflow-${stamp}.json`);
 const results = [];
 
 const server = spawn(process.execPath, ['server/index.js'], {
@@ -13,9 +16,8 @@ const server = spawn(process.execPath, ['server/index.js'], {
   env: {
     ...process.env,
     PORT: String(port),
-    DB_HOST: '',
-    DB_USER: '',
-    DB_NAME: '',
+    NOSQL_DB_PATH: nosqlDbPath,
+    FIREBASE_DISABLED: 'true',
     CLIENT_ORIGIN: `http://127.0.0.1:${port}`,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -103,7 +105,7 @@ try {
       password: 'buyer123',
       name: 'Workflow Buyer',
       role: 'buyer',
-      phone: `+63991${stamp}`,
+      phone: `+639170${stamp}`,
       address: { city: 'Quezon City', street: 'QA Street' },
     },
   })).user;
@@ -118,7 +120,7 @@ try {
       password: 'seller123',
       name: 'Workflow Seller',
       role: 'seller',
-      phone: `+63992${stamp}`,
+      phone: `+639180${stamp}`,
       storeName: 'Workflow Store',
       businessName: 'Workflow Business',
       idDocument: `QA-${stamp}`,
@@ -140,7 +142,7 @@ try {
       password: 'seller123',
       name: 'Other Seller',
       role: 'seller',
-      phone: `+63993${stamp}`,
+      phone: `+639190${stamp}`,
       storeName: 'Other Store',
       businessName: 'Other Business',
       idDocument: `QA-OTHER-${stamp}`,
@@ -267,7 +269,44 @@ try {
   })).product;
   const activeVariant = variantProduct.variants.find((variant) => variant.sku === 'RED-SMALL');
   const inactiveVariant = variantProduct.variants.find((variant) => variant.sku === 'BLUE-SMALL');
+  const bulkVariantA = variantProduct.variants.find((variant) => variant.sku === 'RED-LARGE');
+  const bulkVariantB = variantProduct.variants.find((variant) => variant.sku === 'BLUE-LARGE');
   ok('Seller creates product with variants', `${variantProduct.variants.length} variants`);
+
+  const bulkOrder = (await request('/orders', {
+    method: 'POST',
+    headers: auth(buyerToken),
+    body: {
+      userId: buyer.id,
+      payment: 'cod',
+      address: { city: 'Quezon City', street: 'QA Street' },
+      items: [
+        {
+          productId: variantProduct.id,
+          variantId: bulkVariantA.variantId,
+          variantName: bulkVariantA.variantName,
+          selectedOptions: bulkVariantA.selectedOptions,
+          sku: bulkVariantA.sku,
+          qty: 1,
+        },
+        {
+          productId: variantProduct.id,
+          variantId: bulkVariantB.variantId,
+          variantName: bulkVariantB.variantName,
+          selectedOptions: bulkVariantB.selectedOptions,
+          sku: bulkVariantB.sku,
+          qty: 1,
+        },
+      ],
+    },
+  })).order;
+  await request(`/seller/order-items/${bulkOrder.items[0].orderItemId}/approve`, { method: 'PATCH', headers: auth(sellerToken), body: {} });
+  const sellerOrdersAfterBulkApproval = (await request('/seller/orders', { headers: auth(sellerToken) })).orders;
+  const approvedBulkOrder = sellerOrdersAfterBulkApproval.find((entry) => String(entry.id) === String(bulkOrder.id));
+  if (!approvedBulkOrder?.items.every((entry) => entry.status === 'to_be_packed')) {
+    throw new Error('Approving one bulk order item did not approve all seller items in the order');
+  }
+  ok('Seller approves multi-item buyer order once', `${approvedBulkOrder.items.length} items approved`);
 
   await expectFailure('Inactive variant cannot be checked out', () => request('/orders', {
     method: 'POST',
@@ -334,37 +373,20 @@ try {
   await request(`/seller/order-items/${item.orderItemId}/to_be_shipped`, { method: 'PATCH', headers: auth(sellerToken), body: {} });
   ok('Seller moves order to ready to ship');
 
-  await expectFailure('Seller cannot ship without driver', () => request(`/seller/order-items/${item.orderItemId}/shipping`, {
-    method: 'PATCH',
-    headers: auth(sellerToken),
-    body: {},
-  }), 400);
-
-  const drivers = (await request('/drivers')).drivers;
-  const driver = drivers[0];
   const shippingOrder = (await request(`/seller/order-items/${item.orderItemId}/shipping`, {
     method: 'PATCH',
     headers: auth(sellerToken),
-    body: { driverId: driver.id },
+    body: {},
   })).order;
-  ok('Seller ships order with assigned driver', shippingOrder.items[0].driver.name);
+  if (shippingOrder.items[0].driver) throw new Error('Seller shipping should not assign an internal driver');
+  ok('Seller ships order through third-party courier', shippingOrder.items[0].deliveryStatus);
 
-  const driverLogin = await request('/auth/login', {
-    method: 'POST',
-    body: { identifier: 'juan.driver@lazada.local', email: 'juan.driver@lazada.local', password: 'driver123' },
-  }).catch(async () => request('/auth/login', {
-    method: 'POST',
-    body: { identifier: driver.phone, email: driver.phone, password: 'driver123' },
-  }));
-  const driverToken = driverLogin.token;
-  ok('Driver login', driverLogin.user.name);
-
-  const deliveries = (await request('/driver/deliveries', { headers: auth(driverToken) })).orders;
-  if (!deliveries.length) throw new Error('Driver did not receive assigned delivery');
-  await request(`/driver/deliveries/${item.orderItemId}/picked_up`, { method: 'PATCH', headers: auth(driverToken), body: {} });
-  await request(`/driver/deliveries/${item.orderItemId}/in_transit`, { method: 'PATCH', headers: auth(driverToken), body: {} });
-  const deliveredOrder = (await request(`/driver/deliveries/${item.orderItemId}/delivered`, { method: 'PATCH', headers: auth(driverToken), body: {} })).order;
-  ok('Driver delivery updates reflect on order', deliveredOrder.items[0].status);
+  const deliveredOrder = (await request(`/seller/order-items/${item.orderItemId}/delivered`, {
+    method: 'PATCH',
+    headers: auth(sellerToken),
+    body: {},
+  })).order;
+  ok('Seller marks third-party courier delivery complete', deliveredOrder.items[0].status);
 
   const review = await request('/reviews', {
     method: 'POST',

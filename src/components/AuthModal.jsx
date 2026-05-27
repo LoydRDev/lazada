@@ -306,7 +306,22 @@ const AuthModal = ({ mode }) => {
     if (errors.phone) setErrors({ ...errors, phone: '' });
   };
 
+  const updateRegistrationPhone = (event) => {
+    setForm({ ...form, phone: event.target.value.slice(0, 24) });
+    if (errors.phone) setErrors({ ...errors, phone: '' });
+  };
+
   const normalizedPhone = () => form.phone.replace(/\D/g, '');
+  const validateRegistrationPhone = () => {
+    const raw = form.phone.trim();
+    const allowedFormattingPattern = /^[0-9\s()+.-]+$/;
+    const digits = normalizedPhone();
+
+    if (!raw) return 'Enter your mobile number.';
+    if (!allowedFormattingPattern.test(raw)) return 'Phone number can only use digits and common separators.';
+    if (digits.length !== phPhoneDigits || !digits.startsWith('09')) return 'Use an 11-digit PH mobile number starting with 09.';
+    return '';
+  };
   const phoneEmail = () => `ph${normalizedPhone()}@phone.lazada.local`;
   const internationalPhone = () => {
     const phone = normalizedPhone();
@@ -345,9 +360,8 @@ const AuthModal = ({ mode }) => {
     if (!namePattern.test(form.firstName.trim())) nextErrors.firstName = 'Enter a valid first name.';
     if (!namePattern.test(form.lastName.trim())) nextErrors.lastName = 'Enter a valid last name.';
     if (!emailPattern.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.';
-    if (normalizedPhone().length !== phPhoneDigits || !normalizedPhone().startsWith('09')) {
-      nextErrors.phone = 'Use an 11-digit PH mobile number starting with 09.';
-    }
+    const phoneError = validateRegistrationPhone();
+    if (phoneError) nextErrors.phone = phoneError;
     if (!passwordPattern.test(form.password)) {
       nextErrors.password = 'Use at least 8 characters with uppercase, lowercase, and number.';
     }
@@ -613,11 +627,10 @@ const AuthModal = ({ mode }) => {
                     <label className="auth-field">
                       <input
                         value={form.phone}
-                        onChange={updatePhone}
+                        onChange={updateRegistrationPhone}
                         required
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={phPhoneDigits}
+                        inputMode="tel"
+                        maxLength={24}
                         placeholder="Phone number, e.g. 09171234567"
                         autoComplete="tel"
                       />

@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { peso_fmt } from '../components/ProductCard';
+import { peso_fmt } from '../lib/utils';
 import { useToast } from '../hooks/use-toast';
 
 const AdminLogin = ({ login, currentRole }) => {

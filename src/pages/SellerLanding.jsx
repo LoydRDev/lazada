@@ -74,16 +74,18 @@ const SellerLanding = () => {
     password: '',
   });
 
-  const updatePhone = (event) => setForm({ ...form, phone: event.target.value.replace(/\D/g, '').slice(0, 11) });
+  const updatePhone = (event) => setForm({ ...form, phone: event.target.value.slice(0, 24) });
   const updatePassword = (event) => setForm({ ...form, password: event.target.value });
 
   const apply = async (event) => {
     event.preventDefault();
     if (isSubmitting) return;
 
-    const normalizedPhone = form.phone.replace(/^0/, '');
+    const rawPhone = form.phone.trim();
+    const digits = rawPhone.replace(/\D/g, '');
+    const normalizedPhone = digits.startsWith('0') ? digits.slice(1) : digits;
 
-    if (!/^9\d{9}$/.test(normalizedPhone)) {
+    if (!rawPhone || !/^[0-9\s()+.-]+$/.test(rawPhone) || !/^9\d{9}$/.test(normalizedPhone)) {
       toast({ title: 'Invalid phone number', description: 'Enter a valid PH mobile number like 9123456789 or 09123456789.' });
       return;
     }
@@ -165,7 +167,7 @@ const SellerLanding = () => {
             </div>
             <label className="seller-phone-field">
               <span><span className="seller-flag" /> +63</span>
-              <input value={form.phone} onChange={updatePhone} placeholder="Phone number" inputMode="numeric" />
+              <input value={form.phone} onChange={updatePhone} placeholder="Phone number" inputMode="tel" maxLength={24} />
             </label>
             <label className="seller-password-field">
               <input value={form.password} onChange={updatePassword} type={showPassword ? 'text' : 'password'} placeholder="New Password" />

@@ -23,7 +23,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { peso_fmt } from '../components/ProductCard';
+import { peso_fmt } from '../lib/utils';
 import { VISIBLE_CATEGORIES } from '../data/catalog';
 import { useToast } from '../hooks/use-toast';
 import { isSellerSetupComplete } from '../lib/sellerSetup';
@@ -204,7 +204,7 @@ const readResizedImage = (file, maxSize = 900, quality = 0.82) => new Promise((r
 });
 
 const SellerDashboard = () => {
-  const { sellerUser: user, sellerProducts, drivers, categories, addSellerProduct, updateSellerProduct, removeSellerProduct, orders, refreshSellerOrders, updateSellerOrderItem } = useApp();
+  const { sellerUser: user, sellerProducts, categories, addSellerProduct, updateSellerProduct, removeSellerProduct, orders, refreshSellerOrders, updateSellerOrderItem, refreshSessionUser } = useApp();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -214,7 +214,6 @@ const SellerDashboard = () => {
   const [activePanel, setActivePanel] = useState('products');
   const [activeOrderTab, setActiveOrderTab] = useState('pending');
   const [busyOrderItemId, setBusyOrderItemId] = useState(null);
-  const [driverSelections, setDriverSelections] = useState({});
   const [openMenus, setOpenMenus] = useState({ 'Common Tools': true, Products: true });
   const [form, setForm] = useState(defaultForm);
   const isOrdersPage = activePanel === 'orders' && !isAddProductPage && !isEditProductPage;
@@ -224,9 +223,12 @@ const SellerDashboard = () => {
   const activeCategories = (categories.length ? categories : VISIBLE_CATEGORIES).filter(category => (category.status || 'Active') === 'Active' && !category.hidden);
 
   useEffect(() => {
-    if (user?.role === 'seller') refreshSellerOrders();
+    if (user?.role === 'seller') {
+      refreshSessionUser('seller');
+      refreshSellerOrders();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, pathname]);
 
   useEffect(() => {
     if (!isEditProductPage || !editableProduct) return;
@@ -300,13 +302,8 @@ const SellerDashboard = () => {
   };
 
   const handleOrderAction = async (orderItemId, action) => {
-    const driverId = driverSelections[orderItemId];
-    if (action === 'shipping' && !driverId) {
-      toast({ title: 'Driver required', description: 'Select a driver before shipping this order.' });
-      return;
-    }
     setBusyOrderItemId(orderItemId);
-    const result = await updateSellerOrderItem(orderItemId, action, driverId ? { driverId } : {});
+    const result = await updateSellerOrderItem(orderItemId, action);
     setBusyOrderItemId(null);
     toast({
       title: result.ok ? 'Order updated' : 'Order update failed',
@@ -316,7 +313,9 @@ const SellerDashboard = () => {
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (!user.verified) {
+    const refreshResult = await refreshSessionUser('seller');
+    const currentUser = refreshResult.ok ? refreshResult.user : user;
+    if (!currentUser.verified) {
       toast({ title: 'Account not verified', description: 'An admin must approve your seller account before you can list products.' });
       return;
     }
@@ -514,7 +513,7 @@ const SellerDashboard = () => {
               <button type="button">Find Trending Opportunities</button>
               <button type="button">Analysis Tools <ChevronDown className="h-4 w-4" /></button>
               <button type="button">Bulk Manage <ChevronDown className="h-4 w-4" /></button>
-              <button type="button" className="primary" onClick={() => navigate('/seller/dashboard/add-product')} disabled={!user.verified}><Plus className="h-4 w-4" /> New Product</button>
+              <button type="button" className="primary" onClick={() => navigate('/seller/dashboard/add-product')}><Plus className="h-4 w-4" /> New Product</button>
             </div>
           )}
         </header>
@@ -525,9 +524,6 @@ const SellerDashboard = () => {
             setActiveTab={setActiveOrderTab}
             myOrderItems={myOrderItems}
             busyOrderItemId={busyOrderItemId}
-            drivers={drivers}
-            driverSelections={driverSelections}
-            setDriverSelections={setDriverSelections}
             onAction={handleOrderAction}
           />
         ) : isAddProductPage || isEditProductPage ? (
@@ -596,7 +592,7 @@ const ManageProductsPage = ({ user, myProducts, myOrderItems, removeSellerProduc
           </div>
           <h2>Currently, you do not have any product</h2>
           <p>This is where you will manage your product listing. Let’s add new product to start selling at Lazada.</p>
-          <button type="button" onClick={() => navigate('/seller/dashboard/add-product')} disabled={!user.verified}>New Product</button>
+          <button type="button" onClick={() => navigate('/seller/dashboard/add-product')}>New Product</button>
         </div>
       ) : (
         <div className="seller-manage-table">
@@ -633,13 +629,36 @@ const ManageProductsPage = ({ user, myProducts, myOrderItems, removeSellerProduc
   </>
 );
 
-const SellerOrdersPage = ({ activeTab, setActiveTab, myOrderItems, busyOrderItemId, drivers, driverSelections, setDriverSelections, onAction }) => {
+const SellerOrdersPage = ({ activeTab, setActiveTab, myOrderItems, busyOrderItemId, onAction }) => {
   const activeConfig = sellerStatusTabs.find((tab) => tab.id === activeTab) || sellerStatusTabs[0];
+  const groupPendingOrders = (items) => {
+    const grouped = new Map();
+    items.forEach((item) => {
+      const key = `${item.orderId}:${item.buyerId}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.groupItems.push(item);
+        existing.qty += Number(item.qty || 0);
+        existing.subtotal += Number(item.subtotal || 0);
+        return;
+      }
+      grouped.set(key, {
+        ...item,
+        groupItems: [item],
+        qty: Number(item.qty || 0),
+        subtotal: Number(item.subtotal || 0),
+      });
+    });
+    return [...grouped.values()];
+  };
   const groupedCounts = sellerStatusTabs.reduce((counts, tab) => ({
     ...counts,
-    [tab.id]: myOrderItems.filter((item) => tab.statuses.includes(item.status)).length,
+    [tab.id]: tab.id === 'pending'
+      ? groupPendingOrders(myOrderItems.filter((item) => tab.statuses.includes(item.status))).length
+      : myOrderItems.filter((item) => tab.statuses.includes(item.status)).length,
   }), {});
-  const visibleItems = myOrderItems.filter((item) => activeConfig.statuses.includes(item.status));
+  const activeItems = myOrderItems.filter((item) => activeConfig.statuses.includes(item.status));
+  const visibleItems = activeConfig.id === 'pending' ? groupPendingOrders(activeItems) : activeItems;
 
   return (
     <section className="seller-manage-card">
@@ -670,7 +689,8 @@ const SellerOrdersPage = ({ activeTab, setActiveTab, myOrderItems, busyOrderItem
         <div className="space-y-4">
           {visibleItems.map((item) => {
             const actions = sellerStatusActions[item.status] || [];
-            const shouldChooseDriver = ['packed', 'to_be_shipped'].includes(item.status);
+            const groupItems = item.groupItems || [item];
+            const isBulkOrder = groupItems.length > 1;
             return (
               <article key={item.orderItemId} className="border border-gray-100 rounded-lg p-4 bg-white">
                 <div className="flex items-start gap-3">
@@ -678,7 +698,9 @@ const SellerOrdersPage = ({ activeTab, setActiveTab, myOrderItems, busyOrderItem
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <strong className="block text-sm text-gray-900 line-clamp-2">{item.name}</strong>
+                        <strong className="block text-sm text-gray-900 line-clamp-2">
+                          {isBulkOrder ? `${groupItems.length} items in this buyer order` : item.name}
+                        </strong>
                         {(item.variantName || item.sku) && (
                           <span className="block text-xs text-gray-500">
                             {item.variantName ? `Variation: ${item.variantName}` : null}
@@ -699,34 +721,16 @@ const SellerOrdersPage = ({ activeTab, setActiveTab, myOrderItems, busyOrderItem
                       <div><span className="text-gray-500">Subtotal</span><p className="font-semibold text-orange-600">{peso_fmt(item.subtotal)}</p></div>
                       <div><span className="text-gray-500">Payment</span><p className="font-semibold uppercase">{item.order?.payment || 'COD'}</p></div>
                     </div>
-                    {(shouldChooseDriver || item.driver) && (
+                    {item.driver && (
                       <div className="mt-3 rounded border border-gray-100 bg-gray-50 p-3 text-sm">
-                        {item.driver ? (
-                          <div>
-                            <span className="text-gray-500">Assigned Driver</span>
-                            <p className="font-semibold text-gray-900">{item.driver.name}</p>
-                            <p className="text-xs text-gray-500">
-                              {item.driver.phone} | {item.driver.vehicle}
-                              {item.trackingNumber ? ` | Tracking ${item.trackingNumber}` : ''}
-                            </p>
-                          </div>
-                        ) : (
-                          <label className="block">
-                            <span className="text-gray-500">Driver</span>
-                            <select
-                              className="mt-1 w-full rounded border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                              value={driverSelections[item.orderItemId] || ''}
-                              onChange={event => setDriverSelections((current) => ({ ...current, [item.orderItemId]: event.target.value }))}
-                            >
-                              <option value="">Select delivery driver</option>
-                              {drivers.map((driver) => (
-                                <option key={driver.id} value={driver.id}>
-                                  {driver.name} - {driver.vehicle}{driver.plate ? ` (${driver.plate})` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
+                        <div>
+                          <span className="text-gray-500">Assigned Driver</span>
+                          <p className="font-semibold text-gray-900">{item.driver.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {item.driver.phone} | {item.driver.vehicle}
+                            {item.trackingNumber ? ` | Tracking ${item.trackingNumber}` : ''}
+                          </p>
+                        </div>
                       </div>
                     )}
                     <div className="flex flex-wrap justify-end gap-2 mt-4">
@@ -736,7 +740,7 @@ const SellerOrdersPage = ({ activeTab, setActiveTab, myOrderItems, busyOrderItem
                         <button
                           type="button"
                           key={action.action}
-                          disabled={busyOrderItemId === item.orderItemId || (action.action === 'shipping' && !driverSelections[item.orderItemId])}
+                          disabled={busyOrderItemId === item.orderItemId}
                           onClick={() => onAction(item.orderItemId, action.action)}
                           className={`px-4 py-2 rounded text-sm font-semibold disabled:opacity-60 ${
                             action.tone === 'danger'

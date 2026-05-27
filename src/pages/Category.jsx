@@ -1,4 +1,4 @@
-import  { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { Filter, Star } from 'lucide-react';
 import { CATEGORIES, VISIBLE_CATEGORIES } from '../data/catalog';
@@ -23,7 +23,7 @@ const Category = () => {
     && cat?.subcategories?.some((subcategory) => subcategory.toLowerCase() === normalizedQuery)
   );
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     let list = sellerProducts;
     if (activeCategoryKey) list = list.filter(p => p.category === activeCategoryKey || p.category === id);
     if (normalizedQuery) {
@@ -46,7 +46,7 @@ const Category = () => {
     if (sortBy === 'rating') list = [...list].sort((a, b) => b.rating - a.rating);
     if (sortBy === 'sold') list = [...list].sort((a, b) => b.sold - a.sold);
     return list;
-  }, [sellerProducts, activeCategoryKey, id, normalizedQuery, isSubcategoryQuery, sortBy, minRating, priceRange]);
+  })();
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-4">

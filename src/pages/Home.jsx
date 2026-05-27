@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { FLASH_SALE, PRODUCTS } from '../data/catalog';
 import { useApp } from '../context/AppContext';
-import { getDiscountPercent, ProductCardSkeleton } from '../components/ProductCard';
+import { getDiscountPercent } from '../lib/utils';
+import { ProductCardSkeleton } from '../components/ProductCard';
 
 const peso = (n) => `\u20b1${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 

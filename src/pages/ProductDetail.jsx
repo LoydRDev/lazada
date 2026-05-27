@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES, PRODUCTS, SELLERS } from '../data/catalog';
-import { getDiscountPercent, peso_fmt } from '../components/ProductCard';
+import { getDiscountPercent, peso_fmt } from '../lib/utils';
 import { useToast } from '../hooks/use-toast';
 
 const estimatedDeliveryDate = new Date('2026-05-19T00:00:00+08:00');

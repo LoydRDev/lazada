@@ -5,7 +5,8 @@ const baseURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
 export const api = axios.create({
   baseURL: `${baseURL}/api`,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 5000,
+  // Firestore-backed writes can take longer than the initial catalog request.
+  timeout: 20000,
 });
 
 api.interceptors.request.use((config) => {
